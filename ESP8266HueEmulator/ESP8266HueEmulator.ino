@@ -16,7 +16,7 @@ ESP8266WebServer HTTP(80);
 uDevice device;
 uSSDP SSDP;
 
-String client = "UjBZ0nvTLu7aMdOe"; // The client string that the client app sends. Need to enter here what the app sends.
+String client = "e7x4kuCaC8h885jo"; // "UjBZ0nvTLu7aMdOe"; // The client string that the client app sends. Need to enter here what the app sends.
 // FIXME: Parse this out of what is being sent by the app.
 
 void handleAllOthers() {
@@ -28,7 +28,7 @@ void handleAllOthers() {
 
   if ( requestedUri.endsWith("/config") )
   {
-    String longstr = "{"
+    String longstr = "[{"
                      " \"name\": \"Philips hue\","
                      " \"zigbeechannel\": 15,"
                      " \"mac\": \"00:17:88:00:00:00\","
@@ -73,16 +73,16 @@ void handleAllOthers() {
                      " \"signedon\": true,"
                      " \"incoming\": false,"
                      " \"outgoing\": true,"
-                     " \"communication\": \"disconnected\""
+                     " \"communication\": \"connected\""
                      " }"
-                     "}";
+                     "}]";
     HTTP.send(200, "text/plain", longstr);
     Serial.println(longstr);
   }
   
   else if (requestedUri.endsWith(client))
   {
-    String str = "{\"success\":{\"username\": \"" + client + "\"}}";
+    String str = "[{\"success\":{\"username\": \"" + client + "\"}}]";
     HTTP.send(200, "text/plain", str);
     Serial.println(str);
   }
@@ -90,7 +90,7 @@ void handleAllOthers() {
    // On the real bridge, the link button on the bridge must have been recently pressed for the command to execute successfully.
    // We try to execute successfully regardless of a button for now.
   {
-    String str = "{\"success\":{\"username\": \"" + client + "\"}}";
+    String str = "[{\"success\":{\"username\": \"" + client + "\"}}]";
     HTTP.send(200, "text/plain", str);
     Serial.println(str);
   }
