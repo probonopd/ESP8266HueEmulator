@@ -56,102 +56,16 @@ ESP8266WebServer HTTP(80);
 String client = "e7x4kuCaC8h885jo"; // "UjBZ0nvTLu7aMdOe"; // The client string that the client app sends. Need to enter here what the app sends.
 // FIXME: Parse this out of what is being sent by the app.
 
-String getLightString(int lightNumber) {
-  String lightString = "\"" + String(lightNumber) + "\": {"
-                       "\"state\": {"
-                       "\"on\": true,"
-                       "\"bri\": 144,"
-                       "\"hue\": 13088,"
-                       "\"sat\": 212,"
-                       "\"xy\": [0.5128,0.4147],"
-                       "\"ct\": 467,"
-                       "\"alert\": \"none\","
-                       "\"effect\": \"none\","
-                       "\"colormode\": \"xy\","
-                       "\"reachable\": true"
-                       "},"
-                       "\"type\": \"Extended color light\","
-                       "\"name\": \"Hue Lamp 1\","
-                       "\"modelid\": \"LCT001\","
-                       "\"swversion\": \"66009461\","
-                       "\"pointsymbol\": {"
-                       "\"1\": \"none\","
-                       "\"2\": \"none\","
-                       "\"3\": \"none\","
-                       "\"4\": \"none\","
-                       "\"5\": \"none\","
-                       "\"6\": \"none\","
-                       "\"7\": \"none\","
-                       "\"8\": \"none\""
-                       "}"
-                       "}";
-  return lightString;
-}
-
-
 void handleAllOthers() {
   Serial.println("===");
   String requestedUri = HTTP.uri();
   Serial.print("requestedUri: ");
   Serial.println(requestedUri);
 
-String longstr = "{" // No [] around this one!
-                     " \"name\": \"Philips hue\","
-                     " \"zigbeechannel\": 0," // As per spec, 0 is allowed
-                     " \"mac\": \"" + macString + "\","
-                     " \"dhcp\": true,"
-                     " \"ipaddress\": \"" + ipString + "\","
-                     " \"netmask\": \"255.255.255.0\"," // TODO: FIXME
-                     " \"gateway\": \"192.168.0.1\"," // TODO: FIXME
-                     " \"proxyaddress\": \"none\","
-                     " \"proxyport\": 0,"
-                     " \"UTC\": \"2014-07-17T09:27:35\","
-                     //" \"localtime\": \"2014-07-17T11:27:35\"," // This was added in a bridge update at the beginning of 2014
-                     " \"timezone\": \"\","
-                     //" \"timezone\": \"Europe/Berlin\","
-                     " \"whitelist\": {"
-                     " \"" + client + "\": {"
-                     " \"last use date\": \"2015-06-17T07:21:38\","
-                     " \"create date\": \"2014-04-08T08:55:10\","
-                     " \"name\": \"Chroma for Hue\""
-                     " }"
-                     //  " \"pAtwdCV8NZId25Gk\": {"
-                     //   " \"last use date\": \"2014-05-07T18:28:29\","
-                     //   " \"create date\": \"2014-04-09T17:29:16\","
-                     //   " \"name\": \"MyApplication\""
-                     //   " },"
-                     //  " \"gDN3IaPYSYNPWa2H\": {"
-                     //  " \"last use date\": \"2014-05-07T09:15:21\","
-                     //  " \"create date\": \"2014-05-07T09:14:38\","
-                     //  " \"name\": \"iPhone Web 1\""
-                     //  " }"
-                     " },"
-                     " \"swversion\": \"01012917\","
-                     " \"apiversion\": \"1.3.0\","
-                     " \"swupdate\": {"
-                     " \"updatestate\": 0,"
-                     " \"url\": \"\","
-                     " \"text\": \"\","
-                     " \"notify\": false"
-                     " },"
-                     " \"linkbutton\": true,"
-                     " \"portalservices\": false,"
-                     " \"portalconnection\": \"connected\","
-                     " \"portalstate\": {"
-                     " \"signedon\": false,"
-                     " \"incoming\": false,"
-                     " \"outgoing\": true,"
-                     " \"communication\": \"disconnected\""
-                     " }"
-                     "}";
-
   if ( requestedUri.endsWith("/config") )
   {
-    
-
-    //if (isAuthorized == false) longstr = "[{\"swversion\":\"01008227\",\"apiversion\":\"1.2.1\",\"name\":\"Smartbridge 1\",\"mac\":\"" + macString + "\",}]";
-    //HTTP.send(200, "text/plain", longstr);
-
+    // Using a library like in the following is probably the way to do; we can even do entirely without using String, saving memory.
+    // However, it is not entirely clear to me how to use it, see https://github.com/bblanchon/ArduinoJson/issues/85
     StaticJsonBuffer<200> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
     root["name"] = "Philips hue";
@@ -171,7 +85,7 @@ String longstr = "{" // No [] around this one!
     //HTTP.send(200, "text/plain", "[" + String(buffer) + "]");
     //Serial.println("[" + String(buffer) + "]");
 
-    longstr = "{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\""+macString+"\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\""+ipString+"\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:07:39\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"}";
+    String longstr = "{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\"" + macString + "\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\"" + ipString + "\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:07:39\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"}";
 
     HTTP.send(200, "text/plain", longstr);
     Serial.println(longstr);
@@ -180,8 +94,8 @@ String longstr = "{" // No [] around this one!
 
   else if (requestedUri.endsWith(client))
   {
-    longstr = "{\"lights\":{\"1\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":4444,\"sat\":254,\"xy\":[0.0,0.0],\"ct\":0,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 1\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"2\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":23536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 2\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"3\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":65136,\"sat\":254,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 3\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}}},\"schedules\":{\"1\":{\"time\":\"2012-10-29T12:00:00\",\"description\":\"\",\"name\":\"schedule\",\"command\":{\"body\":{\"on\":true,\"xy\":null,\"bri\":null,\"transitiontime\":null},\"address\":\"/api/newdeveloper/groups/0/action\",\"method\":\"PUT\"}}},\"config\":{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\""+macString+"\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\""+ipString+"\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:18:04\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"},\"groups\":{\"1\":{\"name\":\"Group 1\",\"action\":{\"on\":true,\"bri\":254,\"hue\":33536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":null,\"effect\":\"none\",\"colormode\":\"xy\",\"reachable\":null},\"lights\":[\"1\",\"2\"]}},\"scenes\":{}}";
-    
+    String longstr = "{\"lights\":{\"1\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":4444,\"sat\":254,\"xy\":[0.0,0.0],\"ct\":0,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 1\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"2\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":23536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 2\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"3\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":65136,\"sat\":254,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 3\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}}},\"schedules\":{\"1\":{\"time\":\"2012-10-29T12:00:00\",\"description\":\"\",\"name\":\"schedule\",\"command\":{\"body\":{\"on\":true,\"xy\":null,\"bri\":null,\"transitiontime\":null},\"address\":\"/api/newdeveloper/groups/0/action\",\"method\":\"PUT\"}}},\"config\":{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\"" + macString + "\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\"" + ipString + "\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:18:04\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"},\"groups\":{\"1\":{\"name\":\"Group 1\",\"action\":{\"on\":true,\"bri\":254,\"hue\":33536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":null,\"effect\":\"none\",\"colormode\":\"xy\",\"reachable\":null},\"lights\":[\"1\",\"2\"]}},\"scenes\":{}}";
+
     HTTP.send(200, "text/plain", longstr);
     Serial.println(longstr);
     Serial.println("Responded with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
@@ -189,13 +103,13 @@ String longstr = "{" // No [] around this one!
 
   else if (requestedUri.endsWith("UjBZ0nvTLu7aMdOe")) // FIXME: remove this!!! This is the same as above, but for same strange reason the Chroma app is using a different username!
   {
-    longstr = "{\"lights\":{\"1\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":4444,\"sat\":254,\"xy\":[0.0,0.0],\"ct\":0,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 1\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"2\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":23536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 2\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"3\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":65136,\"sat\":254,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 3\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}}},\"schedules\":{\"1\":{\"time\":\"2012-10-29T12:00:00\",\"description\":\"\",\"name\":\"schedule\",\"command\":{\"body\":{\"on\":true,\"xy\":null,\"bri\":null,\"transitiontime\":null},\"address\":\"/api/newdeveloper/groups/0/action\",\"method\":\"PUT\"}}},\"config\":{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\""+macString+"\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\""+ipString+"\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:18:04\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"},\"groups\":{\"1\":{\"name\":\"Group 1\",\"action\":{\"on\":true,\"bri\":254,\"hue\":33536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":null,\"effect\":\"none\",\"colormode\":\"xy\",\"reachable\":null},\"lights\":[\"1\",\"2\"]}},\"scenes\":{}}";
-    
+    String longstr = "{\"lights\":{\"1\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":4444,\"sat\":254,\"xy\":[0.0,0.0],\"ct\":0,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 1\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"2\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":23536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 2\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"3\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":65136,\"sat\":254,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 3\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}}},\"schedules\":{\"1\":{\"time\":\"2012-10-29T12:00:00\",\"description\":\"\",\"name\":\"schedule\",\"command\":{\"body\":{\"on\":true,\"xy\":null,\"bri\":null,\"transitiontime\":null},\"address\":\"/api/newdeveloper/groups/0/action\",\"method\":\"PUT\"}}},\"config\":{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\"" + macString + "\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\"" + ipString + "\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:18:04\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"},\"groups\":{\"1\":{\"name\":\"Group 1\",\"action\":{\"on\":true,\"bri\":254,\"hue\":33536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":null,\"effect\":\"none\",\"colormode\":\"xy\",\"reachable\":null},\"lights\":[\"1\",\"2\"]}},\"scenes\":{}}";
+
     HTTP.send(200, "text/plain", longstr);
     Serial.println(longstr);
     Serial.println("Responded with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
   }
-  
+
   else if (requestedUri.endsWith("/api"))
     // On the real bridge, the link button on the bridge must have been recently pressed for the command to execute successfully.
     // We try to execute successfully regardless of a button for now.
@@ -206,12 +120,32 @@ String longstr = "{" // No [] around this one!
     Serial.println(str);
   }
 
-  else if (requestedUri.endsWith("/lights"))
-    // We simulate one bulb per NeoPixel (TODO: more clever ideas?)
+  else if (requestedUri.endsWith("/state"))
   {
-    String str = "[{ " + getLightString(1) + "}]";
+    String str = "{ \"state\": { \"hue\": 50000, \"on\": true, \"effect\": \"none\", \"alert\": \"none\", \"bri\": 200, \"sat\": 200, \"ct\": 500, \"xy\": [0.5, 0.5], \"reachable\": true, \"colormode\": \"hs\" }, \"type\": \"Living Colors\", \"name\": \"LC 1\", \"modelid\": \"LC0015\", \"swversion\": \"1.0.3\", \"pointsymbol\": { \"1\": \"none\", \"2\": \"none\", \"3\": \"none\", \"4\": \"none\", \"5\": \"none\", \"6\": \"none\", \"7\": \"none\", \"8\": \"none\" } }";
     HTTP.send(200, "text/plain", str);
     Serial.println(str);
+    // For this to work we need a patched version of esp8266/libraries/ESP8266WebServer/src/Parsing.cpp which hopefully lands in the official channel soon
+    // https://github.com/me-no-dev/Arduino/blob/d4894b115e3bbe753a47b1645a55cab7c62d04e2/hardware/esp8266com/esp8266/libraries/ESP8266WebServer/src/Parsing.cpp
+    Serial.println(HTTP.arg("plain"));
+    int numberOfTheLight = atoi(subStr(requestedUri.c_str(), "/", 4)); // The number of the light to be switched; they start with 1
+    Serial.print("Number of the light --> ");
+    Serial.println(numberOfTheLight);
+
+    StaticJsonBuffer<200> jsonBuffer;
+    JsonObject& root = jsonBuffer.parseObject(( char*) HTTP.arg("plain").c_str());
+    if (!root.success()) {
+      Serial.println("parseObject() failed");
+      return;
+    }
+   bool onValue = root["on"];
+    Serial.print("I should --> ");
+    Serial.println(onValue);
+    if (onValue == true) 
+      strip.SetPixelColor(numberOfTheLight - 1, white); // For now we ignore the color (FIXME)
+    if (onValue == false)
+      strip.SetPixelColor(numberOfTheLight - 1, black); 
+    strip.Show();
   }
 
   else if (requestedUri == "/description.xml")
@@ -227,6 +161,10 @@ String longstr = "{" // No [] around this one!
   {
     HTTP.send(404, "text/plain", "File not found");
     Serial.println("FIXME: To be implemented");
+
+    // Print what the client has POSTed
+    for (uint8_t i = 0; i < HTTP.args(); i++) Serial.printf("ARG[%u]: %s=%s\n", i, HTTP.argName(i).c_str(), HTTP.arg(i).c_str());
+
   }
 }
 
@@ -316,4 +254,19 @@ void infoLight(RgbColor color) {
     strip.SetPixelColor(i, black);
     strip.Show();
   }
+}
+
+// Function to return a substring defined by a delimiter at an index
+// From http://forum.arduino.cc/index.php?topic=41389.msg301116#msg301116
+char* subStr(const char* str, char *delim, int index) {
+  char *act, *sub, *ptr;
+  static char copy[128]; // Length defines the maximum length of the c_string we can process
+  int i;
+  strcpy(copy, str); // Since strtok consumes the first arg, make a copy
+  for (i = 1, act = copy; i <= index; i++, act = NULL) {
+    //Serial.print(".");
+    sub = strtok_r(act, delim, &ptr);
+    if (sub == NULL) break;
+  }
+  return sub;
 }
