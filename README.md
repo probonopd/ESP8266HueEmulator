@@ -8,3 +8,13 @@ __Optionally__, vou can use a strip of individually addressable WS2812b NeoPixel
 To make this work, the sketch advertises its service with the so-called "Simple Service Discovery Protocol" (SSDP) that is also used as discovery protocol of Universal Plug and Play (UPnP). This sketch uses the ESP8266SSDP library from https://github.com/me-no-dev/Arduino
 
 Please note that currently only the bare minimum to advertise the emulated Hue bridge is implemented, but it is enough so that the http://chromaforhue.com OS X app can discover and communicate with the emulated bridge.
+
+## Usage
+
+* Edit the sketch to contain your WLAN credentials
+* Load the sketch onto your ESP-01 or other ESP8266 device
+* Optionally connect the DATA line of your WS2812b NeoPixels to pin GPIO2 (you do not really need this in order to test communication between the sketch and Hue client apps)
+* Watch the output of the sketch in a serial console
+* Try connecting to the emulated bridge by using a Hue client app
+* Continue watching the output of the sketch in a serial console
+* Make sense of it and contribute pull requests ;-)
