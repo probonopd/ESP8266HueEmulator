@@ -18,3 +18,9 @@ Please note that currently only the bare minimum to advertise the emulated Hue b
 * Try connecting to the emulated bridge by using a Hue client app
 * Continue watching the output of the sketch in a serial console
 * Make sense of it and contribute pull requests ;-)
+
+## Credits
+
+* Philips for providing open Hue APIs that are not restricted for use on Philips-branded hardware (as far as I can see by looking at their liberal Terms and Conditions of Use)
+* igrr for bringing the ESP8266 platform to the Arduino IDE
+* me-no-dev for porting the uSSDP library to the ESP8266 platform and helping me make this work
