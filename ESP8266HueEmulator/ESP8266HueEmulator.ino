@@ -4,11 +4,17 @@
  * (even if the app is talking to it)
  **/
 
+
+// To get to the arguments sent by the HTTP client, use:
+// for (uint8_t i=0; i<server.args();i++) Serial.printf("ARG[%u]: %s=%s\n", i, server.argName(i), server.arg(i));
+
+
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <WiFiUDP.h>
 #include "ESP8266SSDP.h"
 #include <NeoPixelBus.h>
+#include <ArduinoJson.h>
 
 // The follwing is needed in order to fill ipString with a String that contains the IP address
 extern "C" {
@@ -89,11 +95,7 @@ void handleAllOthers() {
   Serial.print("requestedUri: ");
   Serial.println(requestedUri);
 
-
-  if ( requestedUri.endsWith("/config") )
-  {
-    String longstr = "[{"
-                     " \"lights\": { " + getLightString(1) + " }," // FIXME: Properly iterate as to provide more than one light
+String longstr = "{" // No [] around this one!
                      " \"name\": \"Philips hue\","
                      " \"zigbeechannel\": 0," // As per spec, 0 is allowed
                      " \"mac\": \"" + macString + "\","
@@ -141,22 +143,55 @@ void handleAllOthers() {
                      " \"outgoing\": true,"
                      " \"communication\": \"disconnected\""
                      " }"
-                     "}]";
+                     "}";
+
+  if ( requestedUri.endsWith("/config") )
+  {
+    
 
     //if (isAuthorized == false) longstr = "[{\"swversion\":\"01008227\",\"apiversion\":\"1.2.1\",\"name\":\"Smartbridge 1\",\"mac\":\"" + macString + "\",}]";
+    //HTTP.send(200, "text/plain", longstr);
+
+    StaticJsonBuffer<200> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+    root["name"] = "Philips hue";
+    root["zigbeechannel"] = "0"; // As per spec, 0 is allowed
+    root["mac"] = macString.c_str();
+    root["dhcp"] = "true";
+    root["ipaddress"] = ipString.c_str();
+    root["netmask"] = "255.255.255.0"; // TODO: FIXME
+    root["gateway"] = "192.168.0.1"; // TODO: FIXME
+    root["proxyaddress"] = "none";
+    root["proxyport"] = "0";
+    //JsonObject& whitelist = root.createNestedObject();
+    //whitelist["name"] = "XXXXXXX";
+    //JsonObject& clientobj = whitelist.createNestedObject();
+    //char buffer[256];
+    //root.prettyPrintTo(buffer, sizeof(buffer));
+    //HTTP.send(200, "text/plain", "[" + String(buffer) + "]");
+    //Serial.println("[" + String(buffer) + "]");
+
     HTTP.send(200, "text/plain", longstr);
     Serial.println(longstr);
-    Serial.println("I assume there is an error n my response since after this the iOS app says Bridge disconnected");
+    Serial.println("I assume there is an error in my response since after this the iOS app says Bridge disconnected");
   }
 
   else if (requestedUri.endsWith(client))
   {
-    String str = "[{\"success\":{\"username\": \"" + client + "\"}}]";
-    HTTP.send(200, "text/plain", str);
-    Serial.println(str);
-    Serial.println("I am not sure what needs to be responded here. http://forum.fhem.de/index.php/topic,11020.msg181588.html#msg181588 says it needs to respons with a COMPLETE json");
+    HTTP.send(200, "text/plain", "{ \"config\": " + longstr + ", \"lights\": " + "{ " + getLightString(1) + "}}" );
+    Serial.println("{ \"config\": " + longstr + ", \"lights\": " + "{ " + getLightString(1) + "}}" );
+    Serial.println("FIXME: Need to respond with a COMPLETE json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
   }
-  
+
+
+  else if (requestedUri.endsWith("UjBZ0nvTLu7aMdOe")) // FIXME: remove this!!!
+  {
+    HTTP.send(200, "text/plain", "{ \"config\": " + longstr + ", \"lights\": " + "{ " + getLightString(1) + "}}" );
+    Serial.println("{ \"config\": " + longstr + ", \"lights\": " + "{ " + getLightString(1) + "}}" );
+    Serial.println("FIXME: Need to respond with a COMPLETE json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
+  }
+
+
   else if (requestedUri.endsWith("/api"))
     // On the real bridge, the link button on the bridge must have been recently pressed for the command to execute successfully.
     // We try to execute successfully regardless of a button for now.
