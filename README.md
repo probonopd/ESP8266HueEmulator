@@ -1,5 +1,5 @@
 # ESP8266HueEmulator
-This sketch emulates a Philips Hue bridge running on an ESP8266 using the Arduino IDE. Right now this is a proof-of-concept; contributions are highly welcome. Hue client apps can discover the emulated bridge and begin talking to it using the Hue protocol.
+This sketch emulates a Philips Hue bridge running on an ESP8266 using the Arduino IDE. Right now this is a proof-of-concept; contributions are highly welcome. Hue client apps can [discover](../../wiki/Discovery) the emulated bridge and begin talking to it using the Hue protocol.
 
 ![phihue_e27_starterset_430x300 jpg](https://cloud.githubusercontent.com/assets/2480569/8511601/e692e61c-231f-11e5-842d-4fedd6f900b4.jpg)
 
