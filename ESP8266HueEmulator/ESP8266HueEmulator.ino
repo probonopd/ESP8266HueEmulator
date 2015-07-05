@@ -29,6 +29,7 @@ RgbColor green = RgbColor(0, colorSaturation, 0);
 RgbColor blue = RgbColor(0, 0, colorSaturation);
 RgbColor white = RgbColor(colorSaturation);
 RgbColor black = RgbColor(0);
+unsigned int transitionTime = 400; // by default there is a transition time to the new state of 400 milliseconds
 
 /// X, Y, Z and x, y are values to desvribe colors
 float X;
@@ -132,13 +133,13 @@ void handleAllOthers() {
       Serial.println("parseObject() failed");
       return;
     }
-   bool onValue = root["on"];
+    bool onValue = root["on"];
     Serial.print("I should --> ");
     Serial.println(onValue);
-    if (onValue == true) 
-      strip.SetPixelColor(numberOfTheLight - 1, white); // For now we ignore the color (FIXME)
+    if (onValue == true)
+      strip.LinearFadePixelColor(transitionTime, numberOfTheLight - 1, white); // For now we ignore the color (FIXME)
     if (onValue == false)
-      strip.SetPixelColor(numberOfTheLight - 1, black); 
+      strip.LinearFadePixelColor(transitionTime, numberOfTheLight - 1, black);
     strip.Show();
   }
 
@@ -220,8 +221,25 @@ void setup() {
 }
 
 void loop() {
+
+  // FIXME: This seems to block everything while a request is being processed which takes about 2 seconds
+  // Can we run this in a separate thread, in "the background"?
   HTTP.handleClient();
   SSDP.update();
+
+  // Start animating the NeoPixels
+  strip.StartAnimating();
+
+  // Wait until no more animations are running
+  // FIXME: This seems to block everything while a transition is running
+  // Can we run this in a separate thread, in "the background"?
+  while (strip.IsAnimating())
+  {
+    strip.UpdateAnimations();
+    strip.Show();
+    delay(31); // ~30hz change cycle
+  }
+
   delay(1);
 }
 
@@ -240,7 +258,7 @@ void rgb2xy(int R, int G, int B) {
 
 void infoLight(RgbColor color) {
   // Flash the strip in the selected color. White = booted, green = WLAN connected, red = WLAN could not connect
-  for (int i = 0; i < 30; i++)
+  for (int i = 0; i < pixelCount; i++)
   {
     strip.SetPixelColor(i, color);
     strip.Show();
