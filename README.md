@@ -1,7 +1,7 @@
 # ESP8266HueEmulator
 This sketch emulates a Philips Hue bridge running on an ESP8266. Right now this is a proof-of-concept. Hue client apps can discover the emulated bridge and begin talking to it using the Hue protocol.
 
-The sketch talks to a strip of NeoPixels connected to GPIO2 of the ESP8266 with no additional circuitry. Right now the sketch uses the NeoPixels to tell that it is powered on, connected to the WLAN etc., but so far I haven't figured out yet how to make the sketch actually process Hue commands to steer the NeoPixels. (FIXME)
+__Optionally__, vou can use a strip of NeoPixels and attach it to GPIO2. The sketch talks to a strip of NeoPixels connected to GPIO2 of the ESP8266 with no additional circuitry. Right now the sketch uses the NeoPixels to tell that it is powered on, connected to the WLAN etc., but so far I haven't figured out yet how to make the sketch actually process Hue commands to steer the NeoPixels. (FIXME)
 
 To make this work, the sketch advertises its service with the so-called "Simple Service Discovery Protocol" (SSDP) that is also used as discovery protocol of Universal Plug and Play (UPnP). This sketch uses the ESP8266SSDP library from https://github.com/me-no-dev/Arduino
 
