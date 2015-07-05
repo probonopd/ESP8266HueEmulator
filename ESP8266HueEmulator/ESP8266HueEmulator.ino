@@ -1,13 +1,7 @@
 /**
- * Emulate Philips Hue Bridge ; so far the Hue app finds the emulated Bridge and
- * requests URLs like /api/UjBZ0nvTLu7aMdOe but in the end it does not succeed "finding" the emulated bridge
- * (even if the app is talking to it)
+ * Emulate Philips Hue Bridge ; so far the Hue app finds the emulated Bridge and gets its config
+ * but you cannot actually switch the NeoPixels with it yet (TODO)
  **/
-
-
-// To get to the arguments sent by the HTTP client, use:
-// for (uint8_t i=0; i<server.args();i++) Serial.printf("ARG[%u]: %s=%s\n", i, server.argName(i), server.arg(i));
-
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
