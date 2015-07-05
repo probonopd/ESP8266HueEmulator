@@ -171,6 +171,8 @@ String longstr = "{" // No [] around this one!
     //HTTP.send(200, "text/plain", "[" + String(buffer) + "]");
     //Serial.println("[" + String(buffer) + "]");
 
+    longstr = "{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\""+macString+"\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\""+ipString+"\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:07:39\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"}";
+
     HTTP.send(200, "text/plain", longstr);
     Serial.println(longstr);
     Serial.println("I assume there is an error in my response since after this the iOS app says Bridge disconnected");
@@ -178,20 +180,22 @@ String longstr = "{" // No [] around this one!
 
   else if (requestedUri.endsWith(client))
   {
-    HTTP.send(200, "text/plain", "{ \"config\": " + longstr + ", \"lights\": " + "{ " + getLightString(1) + "}}" );
-    Serial.println("{ \"config\": " + longstr + ", \"lights\": " + "{ " + getLightString(1) + "}}" );
-    Serial.println("FIXME: Need to respond with a COMPLETE json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
+    longstr = "{\"lights\":{\"1\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":4444,\"sat\":254,\"xy\":[0.0,0.0],\"ct\":0,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 1\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"2\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":23536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 2\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"3\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":65136,\"sat\":254,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 3\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}}},\"schedules\":{\"1\":{\"time\":\"2012-10-29T12:00:00\",\"description\":\"\",\"name\":\"schedule\",\"command\":{\"body\":{\"on\":true,\"xy\":null,\"bri\":null,\"transitiontime\":null},\"address\":\"/api/newdeveloper/groups/0/action\",\"method\":\"PUT\"}}},\"config\":{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\""+macString+"\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\""+ipString+"\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:18:04\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"},\"groups\":{\"1\":{\"name\":\"Group 1\",\"action\":{\"on\":true,\"bri\":254,\"hue\":33536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":null,\"effect\":\"none\",\"colormode\":\"xy\",\"reachable\":null},\"lights\":[\"1\",\"2\"]}},\"scenes\":{}}";
+    
+    HTTP.send(200, "text/plain", longstr);
+    Serial.println(longstr);
+    Serial.println("Responded with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
   }
 
-
-  else if (requestedUri.endsWith("UjBZ0nvTLu7aMdOe")) // FIXME: remove this!!!
+  else if (requestedUri.endsWith("UjBZ0nvTLu7aMdOe")) // FIXME: remove this!!! This is the same as above, but for same strange reason the Chroma app is using a different username!
   {
-    HTTP.send(200, "text/plain", "{ \"config\": " + longstr + ", \"lights\": " + "{ " + getLightString(1) + "}}" );
-    Serial.println("{ \"config\": " + longstr + ", \"lights\": " + "{ " + getLightString(1) + "}}" );
-    Serial.println("FIXME: Need to respond with a COMPLETE json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
+    longstr = "{\"lights\":{\"1\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":4444,\"sat\":254,\"xy\":[0.0,0.0],\"ct\":0,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 1\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"2\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":23536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 2\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"3\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":65136,\"sat\":254,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 3\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}}},\"schedules\":{\"1\":{\"time\":\"2012-10-29T12:00:00\",\"description\":\"\",\"name\":\"schedule\",\"command\":{\"body\":{\"on\":true,\"xy\":null,\"bri\":null,\"transitiontime\":null},\"address\":\"/api/newdeveloper/groups/0/action\",\"method\":\"PUT\"}}},\"config\":{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\""+macString+"\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\""+ipString+"\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:18:04\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"},\"groups\":{\"1\":{\"name\":\"Group 1\",\"action\":{\"on\":true,\"bri\":254,\"hue\":33536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":null,\"effect\":\"none\",\"colormode\":\"xy\",\"reachable\":null},\"lights\":[\"1\",\"2\"]}},\"scenes\":{}}";
+    
+    HTTP.send(200, "text/plain", longstr);
+    Serial.println(longstr);
+    Serial.println("Responded with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
   }
-
-
+  
   else if (requestedUri.endsWith("/api"))
     // On the real bridge, the link button on the bridge must have been recently pressed for the command to execute successfully.
     // We try to execute successfully regardless of a button for now.
@@ -201,6 +205,7 @@ String longstr = "{" // No [] around this one!
     HTTP.send(200, "text/plain", str);
     Serial.println(str);
   }
+
   else if (requestedUri.endsWith("/lights"))
     // We simulate one bulb per NeoPixel (TODO: more clever ideas?)
   {
