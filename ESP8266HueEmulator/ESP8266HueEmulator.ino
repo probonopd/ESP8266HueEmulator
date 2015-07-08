@@ -1,13 +1,13 @@
 /**
  * Emulate Philips Hue Bridge ; so far the Hue app finds the emulated Bridge and gets its config
- * but you cannot actually switch the NeoPixels with it yet (TODO)
+ * and switch on 3 NeoPixels with it so far (TODO)
  **/
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <WiFiUDP.h>
 #include "ESP8266SSDP.h"
-#include <NeoPixelBus.h>
+#include <NeoPixelBus.h> // NeoPixelAnimator branch
 #include <ArduinoJson.h>
 
 // The follwing is needed in order to fill ipString with a String that contains the IP address
@@ -22,14 +22,17 @@ char ipChars[16];
 
 // Settings for the NeoPixels
 #define pixelCount 30 // Strip has 30 NeoPixels
+#define pixelPin 2 // Strip is attached to GPIO2 on ESP-01
 #define colorSaturation 128
-NeoPixelBus strip = NeoPixelBus(pixelCount, 2); // Strip is attached to GPIO2 on ESP-01
 RgbColor red = RgbColor(colorSaturation, 0, 0);
 RgbColor green = RgbColor(0, colorSaturation, 0);
 RgbColor blue = RgbColor(0, 0, colorSaturation);
 RgbColor white = RgbColor(colorSaturation);
 RgbColor black = RgbColor(0);
 unsigned int transitionTime = 400; // by default there is a transition time to the new state of 400 milliseconds
+
+NeoPixelBus strip = NeoPixelBus(pixelCount, pixelPin);
+NeoPixelAnimator animator(&strip); // NeoPixel animation management object
 
 /// X, Y, Z and x, y are values to desvribe colors
 float X;
@@ -46,7 +49,6 @@ String macString;
 String ipString;
 
 ESP8266WebServer HTTP(80);
-
 
 String client = "e7x4kuCaC8h885jo"; // "UjBZ0nvTLu7aMdOe"; // The client string that the client app sends. Need to enter here what the app sends.
 // FIXME: Parse this out of what is being sent by the app.
@@ -84,7 +86,6 @@ void handleAllOthers() {
 
     HTTP.send(200, "text/plain", longstr);
     Serial.println(longstr);
-    Serial.println("I assume there is an error in my response since after this the iOS app says Bridge disconnected");
   }
 
   else if (requestedUri.endsWith(client))
@@ -123,7 +124,7 @@ void handleAllOthers() {
     // For this to work we need a patched version of esp8266/libraries/ESP8266WebServer/src/Parsing.cpp which hopefully lands in the official channel soon
     // https://github.com/me-no-dev/Arduino/blob/d4894b115e3bbe753a47b1645a55cab7c62d04e2/hardware/esp8266com/esp8266/libraries/ESP8266WebServer/src/Parsing.cpp
     Serial.println(HTTP.arg("plain"));
-    int numberOfTheLight = atoi(subStr(requestedUri.c_str(), "/", 4)); // The number of the light to be switched; they start with 1
+    int numberOfTheLight = atoi(subStr(requestedUri.c_str(), "/", 4)) - 1; // The number of the light to be switched; they start with 1
     Serial.print("Number of the light --> ");
     Serial.println(numberOfTheLight);
 
@@ -136,11 +137,32 @@ void handleAllOthers() {
     bool onValue = root["on"];
     Serial.print("I should --> ");
     Serial.println(onValue);
+    // define the effect to apply, in this case linear blend
+    HslColor originalColor = strip.GetPixelColor(numberOfTheLight);
+
     if (onValue == true)
-      strip.LinearFadePixelColor(transitionTime, numberOfTheLight - 1, white); // For now we ignore the color (FIXME)
+    {
+      AnimUpdateCallback animUpdate = [ = ](float progress)
+      {
+        // progress will start at 0.0 and end at 1.0
+        HslColor updatedColor = HslColor::LinearBlend(originalColor, white, (uint8_t)(255 * progress));
+        strip.SetPixelColor(numberOfTheLight, updatedColor);
+      };
+      strip.SetPixelColor(numberOfTheLight, white); // For now we ignore the color (FIXME)
+      animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
+    }
     if (onValue == false)
-      strip.LinearFadePixelColor(transitionTime, numberOfTheLight - 1, black);
-    strip.Show();
+    {
+      AnimUpdateCallback animUpdate = [ = ](float progress)
+      {
+        // progress will start at 0.0 and end at 1.0
+        HslColor updatedColor = HslColor::LinearBlend(originalColor, black, (uint8_t)(255 * progress));
+        strip.SetPixelColor(numberOfTheLight, updatedColor);
+      };
+      strip.SetPixelColor(numberOfTheLight, black);
+      animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
+    }
+
   }
 
   else if (requestedUri == "/description.xml")
@@ -185,12 +207,8 @@ void setup() {
 
   macString = String(WiFi.macAddress());
 
-  // ipString = String(WiFi.localIP());
-
-
   os_sprintf(ipChars, IPSTR, IP2STR(WiFi.localIP()));
   ipString = String(ipChars);
-
 
   Serial.print("Starting HTTP at ");
   Serial.print(WiFi.localIP());
@@ -203,7 +221,6 @@ void setup() {
 
   // Show that we are connected
   infoLight(green);
-
 
   Serial.printf("Starting SSDP...\n");
   SSDP.begin();
@@ -221,31 +238,26 @@ void setup() {
 }
 
 void loop() {
-
   // FIXME: This seems to block everything while a request is being processed which takes about 2 seconds
   // Can we run this in a separate thread, in "the background"?
+  // Makuna has a task library that "helps" manage non-preemptive tasks, but it would require
+  // that HTTP.handleClient() and/or SSDP.update() be modified to do less in a loop at one time.
+  // We might bring this question up on the esp8266/arduino chat to see if there is support
+  // to thread off the networking stuff; but in general, we don't have a multitasking core.
   HTTP.handleClient();
   SSDP.update();
 
-  // Start animating the NeoPixels
-  strip.StartAnimating();
-
-  // Wait until no more animations are running
-  // FIXME: This seems to block everything while a transition is running
-  // Can we run this in a separate thread, in "the background"?
-  while (strip.IsAnimating())
+  static unsigned long update_strip_time = 0;  //  keeps track of pixel refresh rate... limits updates to 33 Hz
+  if (millis() - update_strip_time > 30)
   {
-    strip.UpdateAnimations();
+    if ( animator.IsAnimating() ) animator.UpdateAnimations(100);
     strip.Show();
-    delay(31); // ~30hz change cycle
+    update_strip_time = millis();
   }
-
-  delay(1);
 }
 
-
-void rgb2xy(int R, int G, int B) {
-
+void rgb2xy(int R, int G, int B)
+{
   // Convert the RGB values to XYZ using the Wide RGB D65 conversion formula
   float X = R * 0.664511f + G * 0.154324f + B * 0.162028f;
   float Y = R * 0.283881f + G * 0.668433f + B * 0.047685f;
