@@ -3,6 +3,10 @@
  * and switch on 3 NeoPixels with it so far (TODO)
  **/
 
+// TODO: Change SSDP to get rid of local copies of ESP8266SSDP use the new scheme from the Arduino IDE instead
+// https://github.com/esp8266/Arduino/commit/f5ba04d46c0b6df75348f005e68411a856f89e48
+// can then get rid of the SSDP.update();
+
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <WiFiUDP.h>
@@ -145,10 +149,9 @@ void handleAllOthers() {
       AnimUpdateCallback animUpdate = [ = ](float progress)
       {
         // progress will start at 0.0 and end at 1.0
-        HslColor updatedColor = HslColor::LinearBlend(originalColor, white, (uint8_t)(255 * progress));
+        HslColor updatedColor = HslColor::LinearBlend(originalColor, white, progress);
         strip.SetPixelColor(numberOfTheLight, updatedColor);
       };
-      strip.SetPixelColor(numberOfTheLight, white); // For now we ignore the color (FIXME)
       animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
     }
     if (onValue == false)
@@ -156,10 +159,9 @@ void handleAllOthers() {
       AnimUpdateCallback animUpdate = [ = ](float progress)
       {
         // progress will start at 0.0 and end at 1.0
-        HslColor updatedColor = HslColor::LinearBlend(originalColor, black, (uint8_t)(255 * progress));
+        HslColor updatedColor = HslColor::LinearBlend(originalColor, black, progress);
         strip.SetPixelColor(numberOfTheLight, updatedColor);
       };
-      strip.SetPixelColor(numberOfTheLight, black);
       animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
     }
 
@@ -192,6 +194,7 @@ void setup() {
   strip.Show();
 
   // Show that the NeoPixels are alive
+  delay(120); // Apparently needed to make the first few pixels animate correctly
   infoLight(white);
 
   Serial.begin(115200);
