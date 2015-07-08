@@ -14,12 +14,6 @@
 #include <NeoPixelBus.h> // NeoPixelAnimator branch
 #include <ArduinoJson.h>
 
-// The follwing is needed in order to fill ipString with a String that contains the IP address
-extern "C" {
-#include "ip_addr.h"
-}
-char ipChars[16];
-
 #include "/secrets.h" // Delete this line and populate the following
 //const char* ssid = "********";
 //const char* password = "********";
@@ -209,9 +203,7 @@ void setup() {
   }
 
   macString = String(WiFi.macAddress());
-
-  os_sprintf(ipChars, IPSTR, IP2STR(WiFi.localIP()));
-  ipString = String(ipChars);
+  ipString = StringIPaddress();
 
   Serial.print("Starting HTTP at ");
   Serial.print(WiFi.localIP());
@@ -296,4 +288,16 @@ char* subStr(const char* str, char *delim, int index) {
     if (sub == NULL) break;
   }
   return sub;
+}
+
+String StringIPaddress()
+{
+  String LocalIP = "";
+  IPAddress myaddr = WiFi.localIP();
+  for (int i = 0; i < 4; i++)
+  { 
+  LocalIP += String(myaddr[i]); 
+  if (i < 3) LocalIP += ".";
+  }
+  return LocalIP; 
 }
