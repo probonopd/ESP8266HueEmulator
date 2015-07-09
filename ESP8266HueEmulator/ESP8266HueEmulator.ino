@@ -63,37 +63,33 @@ void handleAllOthers() {
     StaticJsonBuffer<1024> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
     addConfigJson(root);
-    char buffer[1024];
-    root.printTo(buffer, sizeof(buffer));
-    HTTP.send(200, "text/plain", buffer);
-    // root.prettyPrintTo(Serial);
+
+    root.prettyPrintTo(Serial);
+    WiFiClient client = HTTP.client();
+    root.prettyPrintTo((Print&)client); // Thanks me-no-dev for the "(Print&)"
+
   }
 
   else if ((requestedUri.startsWith("/api") and (requestedUri.lastIndexOf("/") == 4 )))
   {
-//    String longstr = "{\"lights\":{\"1\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":4444,\"sat\":254,\"xy\":[0.0,0.0],\"ct\":0,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 1\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"2\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":23536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 2\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"3\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":65136,\"sat\":254,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 3\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}}},\"schedules\":{\"1\":{\"time\":\"2012-10-29T12:00:00\",\"description\":\"\",\"name\":\"schedule\",\"command\":{\"body\":{\"on\":true,\"xy\":null,\"bri\":null,\"transitiontime\":null},\"address\":\"/api/newdeveloper/groups/0/action\",\"method\":\"PUT\"}}},\"config\":{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\"" + macString + "\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\"" + ipString + "\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:18:04\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"},\"groups\":{\"1\":{\"name\":\"Group 1\",\"action\":{\"on\":true,\"bri\":254,\"hue\":33536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":null,\"effect\":\"none\",\"colormode\":\"xy\",\"reachable\":null},\"lights\":[\"1\",\"2\"]}},\"scenes\":{}}";
+    // Serial.println("Respond with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
 
-//    HTTP.send(200, "text/plain", longstr);
-//    Serial.println(longstr);
-      Serial.println("Respond with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
-
-    StaticJsonBuffer<1024> jsonBuffer;
+    StaticJsonBuffer<2048> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
     JsonObject& groups = root.createNestedObject("groups");
     JsonObject& scenes = root.createNestedObject("scenes");
     JsonObject& config = root.createNestedObject("config");
     addConfigJson(config);
     JsonObject& lights = root.createNestedObject("lights");
-    //addLightJson(lights, 1); // This crashes (FIXME)
-    JsonObject& schedules = root.createNestedObject("schedules");
+    addLightJson(lights, 1); // I think this is prone to crashes; see https://github.com/bblanchon/ArduinoJson/issues/87
 //    for (int i = 1; i < 2; i++)
 //    {
 //      addLightJson(root, i); // This crashes when i>1; see https://github.com/bblanchon/ArduinoJson/issues/87
 //    }
-    char buffer[1024];
-    root.printTo(buffer, sizeof(buffer));
-    HTTP.send(200, "text/plain", buffer);
+    JsonObject& schedules = root.createNestedObject("schedules");
     root.prettyPrintTo(Serial);
+    WiFiClient client = HTTP.client();
+    root.prettyPrintTo((Print&)client); // Thanks me-no-dev for the "(Print&)"
   }
 
   else if (requestedUri.endsWith("/api"))
