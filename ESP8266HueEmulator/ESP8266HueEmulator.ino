@@ -7,12 +7,17 @@
 // https://github.com/esp8266/Arduino/commit/f5ba04d46c0b6df75348f005e68411a856f89e48
 // can then get rid of the SSDP.update();
 
+// The following MUST be changed in aJSON.h, otherwise JSON will be cut off
+// #define PRINT_BUFFER_LEN 2048
+
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <WiFiUDP.h>
 #include "ESP8266SSDP.h"
 #include <NeoPixelBus.h> // NeoPixelAnimator branch
-#include <ArduinoJson.h>
+#include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there
+
+
 
 #include "/secrets.h" // Delete this line and populate the following
 //const char* ssid = "********";
@@ -21,13 +26,13 @@
 // Settings for the NeoPixels
 #define pixelCount 30 // Strip has 30 NeoPixels
 #define pixelPin 2 // Strip is attached to GPIO2 on ESP-01
-#define colorSaturation 128
+#define colorSaturation 254
 RgbColor red = RgbColor(colorSaturation, 0, 0);
 RgbColor green = RgbColor(0, colorSaturation, 0);
 RgbColor blue = RgbColor(0, 0, colorSaturation);
 RgbColor white = RgbColor(colorSaturation);
 RgbColor black = RgbColor(0);
-unsigned int transitionTime = 400; // by default there is a transition time to the new state of 400 milliseconds
+unsigned int transitionTime = 800; // by default there is a transition time to the new state of 400 milliseconds
 
 NeoPixelBus strip = NeoPixelBus(pixelCount, pixelPin);
 NeoPixelAnimator animator(&strip); // NeoPixel animation management object
@@ -48,8 +53,19 @@ String ipString;
 
 ESP8266WebServer HTTP(80);
 
-String client = "e7x4kuCaC8h885jo"; // "UjBZ0nvTLu7aMdOe"; // The client string that the client app sends. Need to enter here what the app sends.
+String client = "e7x4kuCaC8h885jo"; // The client name that the sketch gives to the app
 // FIXME: Parse this out of what is being sent by the app.
+
+void sendJson(aJsonObject *root)
+{
+  // Take aJsonObject and print it to Serial and to WiFi
+  // From https://github.com/pubnub/msp430f5529/blob/master/msp430f5529.ino
+  char *msgStr = aJson.print(root);
+  aJson.deleteItem(root);
+  Serial.println(msgStr);
+  HTTP.send(200, "text/plain", msgStr);
+  free(msgStr);
+}
 
 void handleAllOthers() {
   Serial.println("===");
@@ -59,49 +75,32 @@ void handleAllOthers() {
 
   if ( requestedUri.endsWith("/config") )
   {
-    // Using a library like in the following is probably the way to do; we can even do entirely without using String, saving memory.
-    // However, it is not entirely clear to me how to use it, see https://github.com/bblanchon/ArduinoJson/issues/85
-    StaticJsonBuffer<200> jsonBuffer;
-    JsonObject& root = jsonBuffer.createObject();
-    root["name"] = "Philips hue";
-    root["zigbeechannel"] = "0"; // As per spec, 0 is allowed
-    root["mac"] = macString.c_str();
-    root["dhcp"] = "true";
-    root["ipaddress"] = ipString.c_str();
-    root["netmask"] = "255.255.255.0"; // TODO: FIXME
-    root["gateway"] = "192.168.0.1"; // TODO: FIXME
-    root["proxyaddress"] = "none";
-    root["proxyport"] = "0";
-    //JsonObject& whitelist = root.createNestedObject();
-    //whitelist["name"] = "XXXXXXX";
-    //JsonObject& clientobj = whitelist.createNestedObject();
-    //char buffer[256];
-    //root.prettyPrintTo(buffer, sizeof(buffer));
-    //HTTP.send(200, "text/plain", "[" + String(buffer) + "]");
-    //Serial.println("[" + String(buffer) + "]");
-
-    String longstr = "{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\"" + macString + "\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\"" + ipString + "\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:07:39\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"}";
-
-    HTTP.send(200, "text/plain", longstr);
-    Serial.println(longstr);
+    aJsonObject *root;
+    root = aJson.createObject();
+    addConfigJson(root);
+    sendJson(root);
   }
 
-  else if (requestedUri.endsWith(client))
+  else if ((requestedUri.startsWith("/api") and (requestedUri.lastIndexOf("/") == 4 )))
   {
-    String longstr = "{\"lights\":{\"1\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":4444,\"sat\":254,\"xy\":[0.0,0.0],\"ct\":0,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 1\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"2\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":23536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 2\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"3\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":65136,\"sat\":254,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 3\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}}},\"schedules\":{\"1\":{\"time\":\"2012-10-29T12:00:00\",\"description\":\"\",\"name\":\"schedule\",\"command\":{\"body\":{\"on\":true,\"xy\":null,\"bri\":null,\"transitiontime\":null},\"address\":\"/api/newdeveloper/groups/0/action\",\"method\":\"PUT\"}}},\"config\":{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\"" + macString + "\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\"" + ipString + "\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:18:04\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"},\"groups\":{\"1\":{\"name\":\"Group 1\",\"action\":{\"on\":true,\"bri\":254,\"hue\":33536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":null,\"effect\":\"none\",\"colormode\":\"xy\",\"reachable\":null},\"lights\":[\"1\",\"2\"]}},\"scenes\":{}}";
+    // Serial.println("Respond with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
+    aJsonObject *root;
+    root = aJson.createObject();
+    aJsonObject *groups;
+    aJson.addItemToObject(root, "groups", groups = aJson.createObject());
+    aJsonObject *scenes;
+    aJson.addItemToObject(root, "scenes", scenes = aJson.createObject());
+    aJsonObject *config;
+    aJson.addItemToObject(root, "config", config = aJson.createObject());
+    addConfigJson(config);
+    aJsonObject *lights;
+    aJson.addItemToObject(root, "lights", lights = aJson.createObject());
+    for (int i = 1; i <= 8; i++) // FIXME: Why does this not work for more than 8?
+      addLightJson(lights, i);
+    aJsonObject *schedules;
+    aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
+    sendJson(root);
 
-    HTTP.send(200, "text/plain", longstr);
-    Serial.println(longstr);
-    Serial.println("Responded with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
-  }
-
-  else if (requestedUri.endsWith("UjBZ0nvTLu7aMdOe")) // FIXME: remove this!!! This is the same as above, but for same strange reason the Chroma app is using a different username!
-  {
-    String longstr = "{\"lights\":{\"1\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":4444,\"sat\":254,\"xy\":[0.0,0.0],\"ct\":0,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 1\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"2\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":23536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 2\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}},\"3\":{\"state\":{\"on\":true,\"bri\":254,\"hue\":65136,\"sat\":254,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":\"none\",\"effect\":\"none\",\"colormode\":\"hs\",\"reachable\":true},\"type\":\"Extended color light\",\"name\":\"Hue Lamp 3\",\"modelid\":\"LCT001\",\"swversion\":\"65003148\",\"pointsymbol\":{\"1\":\"none\",\"2\":\"none\",\"3\":\"none\",\"4\":\"none\",\"5\":\"none\",\"6\":\"none\",\"7\":\"none\",\"8\":\"none\"}}},\"schedules\":{\"1\":{\"time\":\"2012-10-29T12:00:00\",\"description\":\"\",\"name\":\"schedule\",\"command\":{\"body\":{\"on\":true,\"xy\":null,\"bri\":null,\"transitiontime\":null},\"address\":\"/api/newdeveloper/groups/0/action\",\"method\":\"PUT\"}}},\"config\":{\"portalservices\":false,\"gateway\":\"192.168.2.1\",\"mac\":\"" + macString + "\",\"swversion\":\"01005215\",\"linkbutton\":false,\"ipaddress\":\"" + ipString + "\",\"proxyport\":0,\"swupdate\":{\"text\":\"\",\"notify\":false,\"updatestate\":0,\"url\":\"\"},\"netmask\":\"255.255.255.0\",\"name\":\"Philips hue\",\"dhcp\":true,\"proxyaddress\":\"\",\"whitelist\":{\"newdeveloper\":{\"name\":\"test user\",\"last use date\":\"2012-10-29T12:00:00\",\"create date\":\"2012-10-29T12:00:00\"},\"e7x4kuCaC8h885jo\":{\"name\":\"appname#devicename\",\"last use date\":\"2015-07-05T17:18:04\",\"create date\":\"2015-07-05T16:58:10\"}},\"UTC\":\"2012-10-29T12:05:00\"},\"groups\":{\"1\":{\"name\":\"Group 1\",\"action\":{\"on\":true,\"bri\":254,\"hue\":33536,\"sat\":144,\"xy\":[0.346,0.3568],\"ct\":201,\"alert\":null,\"effect\":\"none\",\"colormode\":\"xy\",\"reachable\":null},\"lights\":[\"1\",\"2\"]}},\"scenes\":{}}";
-
-    HTTP.send(200, "text/plain", longstr);
-    Serial.println(longstr);
-    Serial.println("Responded with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
   }
 
   else if (requestedUri.endsWith("/api"))
@@ -116,28 +115,25 @@ void handleAllOthers() {
 
   else if (requestedUri.endsWith("/state"))
   {
-    String str = "{ \"state\": { \"hue\": 50000, \"on\": true, \"effect\": \"none\", \"alert\": \"none\", \"bri\": 200, \"sat\": 200, \"ct\": 500, \"xy\": [0.5, 0.5], \"reachable\": true, \"colormode\": \"hs\" }, \"type\": \"Living Colors\", \"name\": \"LC 1\", \"modelid\": \"LC0015\", \"swversion\": \"1.0.3\", \"pointsymbol\": { \"1\": \"none\", \"2\": \"none\", \"3\": \"none\", \"4\": \"none\", \"5\": \"none\", \"6\": \"none\", \"7\": \"none\", \"8\": \"none\" } }";
-    HTTP.send(200, "text/plain", str);
-    Serial.println(str);
     // For this to work we need a patched version of esp8266/libraries/ESP8266WebServer/src/Parsing.cpp which hopefully lands in the official channel soon
     // https://github.com/me-no-dev/Arduino/blob/d4894b115e3bbe753a47b1645a55cab7c62d04e2/hardware/esp8266com/esp8266/libraries/ESP8266WebServer/src/Parsing.cpp
+    if (HTTP.arg("plain") == "")
+    {
+      Serial.println("You need to use a newer version of the ESP8266WebServer library from https://github.com/me-no-dev/Arduino/blob/d4894b115e3bbe753a47b1645a55cab7c62d04e2/hardware/esp8266com/esp8266/libraries/ESP8266WebServer/src/Parsing.cpp");
+      yield();
+    }
     Serial.println(HTTP.arg("plain"));
     int numberOfTheLight = atoi(subStr(requestedUri.c_str(), "/", 4)) - 1; // The number of the light to be switched; they start with 1
     Serial.print("Number of the light --> ");
     Serial.println(numberOfTheLight);
-
-    StaticJsonBuffer<200> jsonBuffer;
-    JsonObject& root = jsonBuffer.parseObject(( char*) HTTP.arg("plain").c_str());
-    if (!root.success()) {
-      Serial.println("parseObject() failed");
-      return;
-    }
-    bool onValue = root["on"];
+    aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
+    aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
+    bool onValue = onState->valuebool;
+    aJson.deleteItem(parsedRoot);
     Serial.print("I should --> ");
     Serial.println(onValue);
     // define the effect to apply, in this case linear blend
     HslColor originalColor = strip.GetPixelColor(numberOfTheLight);
-
     if (onValue == true)
     {
       AnimUpdateCallback animUpdate = [ = ](float progress)
@@ -148,7 +144,7 @@ void handleAllOthers() {
       };
       animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
     }
-    if (onValue == false)
+    else
     {
       AnimUpdateCallback animUpdate = [ = ](float progress)
       {
@@ -159,6 +155,10 @@ void handleAllOthers() {
       animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
     }
 
+    aJsonObject *root;
+    root = aJson.createObject();
+    addLightJson(root, numberOfTheLight);
+    sendJson(root);
   }
 
   else if (requestedUri == "/description.xml")
@@ -263,6 +263,8 @@ void rgb2xy(int R, int G, int B)
   float y = Y / (X + Y + Z);
 }
 
+// See https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/commit/00187a3db88dedd640f5ddfa8a474458dff4e1db for more needed color conversions
+
 void infoLight(RgbColor color) {
   // Flash the strip in the selected color. White = booted, green = WLAN connected, red = WLAN could not connect
   for (int i = 0; i < pixelCount; i++)
@@ -295,9 +297,69 @@ String StringIPaddress()
   String LocalIP = "";
   IPAddress myaddr = WiFi.localIP();
   for (int i = 0; i < 4; i++)
-  { 
-  LocalIP += String(myaddr[i]); 
-  if (i < 3) LocalIP += ".";
+  {
+    LocalIP += String(myaddr[i]);
+    if (i < 3) LocalIP += ".";
   }
-  return LocalIP; 
+  return LocalIP;
+}
+
+void addConfigJson(aJsonObject *root)
+{
+  aJson.addStringToObject(root, "name", "Philips hue");
+  aJson.addStringToObject(root, "swversion", "01005215");
+  aJson.addBooleanToObject(root, "portalservices", false);
+  aJson.addStringToObject(root, "zigbeechannel", "0"); // As per spec, 0 is allowed
+  aJson.addStringToObject(root, "mac", macString.c_str());
+  aJson.addBooleanToObject(root, "dhcp", true);
+  aJson.addStringToObject(root, "ipaddress", ipString.c_str());
+  aJson.addStringToObject(root, "netmask", "255.255.255.0"); // TODO: FIXME
+  aJson.addStringToObject(root, "gateway", "192.168.0.1"); // TODO: FIXME
+  aJson.addStringToObject(root, "proxyaddress", "");
+  aJson.addNumberToObject(root, "proxyport", 0);
+  aJson.addStringToObject(root, "UTC", "2012-10-29T12:05:00");
+  aJsonObject *whitelist;
+  aJson.addItemToObject(root, "whitelist", whitelist = aJson.createObject());
+  aJsonObject *whitelistFirstEntry;
+  aJson.addItemToObject(whitelist, "e7x4kuCaC8h885jo", whitelistFirstEntry = aJson.createObject()); // FIXME: Do not hardcode e7x4kuCaC8h885jo
+  aJson.addStringToObject(whitelistFirstEntry, "name", "clientname#devicename");
+  aJson.addStringToObject(whitelistFirstEntry, "last use date", "2015-07-05T16:48:18");
+  aJson.addStringToObject(whitelistFirstEntry, "create date", "2015-07-05T16:48:17");
+  aJsonObject *swupdate;
+  aJson.addItemToObject(root, "swupdate", swupdate = aJson.createObject());
+  aJson.addStringToObject(swupdate, "text", "");
+  aJson.addBooleanToObject(swupdate, "notify", false);
+  aJson.addNumberToObject(swupdate, "updatestate", 0);
+  aJson.addStringToObject(swupdate, "url", "");
+}
+
+void addLightJson(aJsonObject* root, int numberOfTheLight)
+{
+  String lightName = "" + (String) numberOfTheLight;
+  aJsonObject *light;
+  aJson.addItemToObject(root, lightName.c_str(), light = aJson.createObject());
+  aJson.addStringToObject(light, "type", "Extended color light");
+  aJson.addStringToObject(light, "name",  ("Hue Lamp " + (String) numberOfTheLight).c_str());
+  aJson.addStringToObject(light, "modelid", "LCT001");
+  aJsonObject *state;
+  aJson.addItemToObject(light, "state", state = aJson.createObject());
+  unsigned int brightness = strip.GetPixelColor(numberOfTheLight - 1).CalculateBrightness();
+  if (brightness == 0)
+  {
+    aJson.addBooleanToObject(state, "on", false);
+  }
+  else
+  {
+    aJson.addBooleanToObject(state, "on", true);
+  }
+  aJson.addNumberToObject(state, "bri", 254); // Should be 1-254 according to Philips API
+  aJson.addNumberToObject(state, "hue", 0); // Should between 0 and 65535. Both 0 and 65535 are red, 25500 is green and 46920 is blue
+  aJson.addNumberToObject(state, "sat", 0);
+  double numbers[2] = {0.0, 0.0};
+  aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2));
+  aJson.addStringToObject(state, "alert", "none");
+  aJson.addStringToObject(state, "effect", "none");
+  aJson.addStringToObject(state, "colormode", "hs");
+  aJson.addBooleanToObject(state, "reachable", true);
+
 }
