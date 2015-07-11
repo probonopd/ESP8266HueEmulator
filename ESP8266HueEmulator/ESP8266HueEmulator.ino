@@ -1,6 +1,6 @@
 /**
  * Emulate Philips Hue Bridge ; so far the Hue app finds the emulated Bridge and gets its config
- * and switch on 3 NeoPixels with it so far (TODO)
+ * and switch NeoPixels with it 
  **/
 
 // TODO: Change SSDP to get rid of local copies of ESP8266SSDP use the new scheme from the Arduino IDE instead
@@ -129,6 +129,10 @@ void handleAllOthers() {
     aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
     aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
     bool onValue = onState->valuebool;
+
+    // The client app uses xy, ct, and hue, sat interchangeably.
+    // If multiple ones are submitted at once, the following convention is used: xy beats ct beats hue/sat
+    // TODO: Implement this
 
     // Default values in case the request does not send new ones; TODO: Read from pixel instead!
     int hue = 1;
@@ -312,8 +316,8 @@ String StringIPaddress(IPAddress myaddr)
 
 void addConfigJson(aJsonObject *root)
 {
-  aJson.addStringToObject(root, "name", "Philips hue");
-  aJson.addStringToObject(root, "swversion", "01005215");
+  aJson.addStringToObject(root, "name", "hue emulator");
+  aJson.addStringToObject(root, "swversion", "0.1");
   // aJson.addBooleanToObject(root, "portalservices", false);
   // aJson.addStringToObject(root, "zigbeechannel", "0"); // As per spec, 0 is allowed
   aJson.addStringToObject(root, "mac", macString.c_str());
@@ -323,14 +327,14 @@ void addConfigJson(aJsonObject *root)
   aJson.addStringToObject(root, "gateway", gatewayString.c_str());
   // aJson.addStringToObject(root, "proxyaddress", ""); // Seems not required by client app
   // aJson.addNumberToObject(root, "proxyport", 0); // Seems not required by client app
-  aJson.addStringToObject(root, "UTC", "2012-10-29T12:05:00");
+  // aJson.addStringToObject(root, "UTC", "2012-10-29T12:05:00"); // Seems not required by client app
   aJsonObject *whitelist;
   aJson.addItemToObject(root, "whitelist", whitelist = aJson.createObject());
   aJsonObject *whitelistFirstEntry;
   aJson.addItemToObject(whitelist, client.c_str(), whitelistFirstEntry = aJson.createObject());
   aJson.addStringToObject(whitelistFirstEntry, "name", "clientname#devicename");
-  aJson.addStringToObject(whitelistFirstEntry, "last use date", "2015-07-05T16:48:18");
-  aJson.addStringToObject(whitelistFirstEntry, "create date", "2015-07-05T16:48:17");
+  // aJson.addStringToObject(whitelistFirstEntry, "last use date", "2015-07-05T16:48:18"); // Seems not required by client app
+  // aJson.addStringToObject(whitelistFirstEntry, "create date", "2015-07-05T16:48:17"); // Seems not required by client app
   aJsonObject *swupdate;
   aJson.addItemToObject(root, "swupdate", swupdate = aJson.createObject());
   aJson.addStringToObject(swupdate, "text", "");
@@ -345,8 +349,8 @@ void addLightJson(aJsonObject* root, int numberOfTheLight)
   aJsonObject *light;
   aJson.addItemToObject(root, lightName.c_str(), light = aJson.createObject());
   aJson.addStringToObject(light, "type", "Extended color light");
-  aJson.addStringToObject(light, "name",  ("Hue Lamp " + (String) numberOfTheLight).c_str());
-  aJson.addStringToObject(light, "modelid", "LCT001");
+  aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) numberOfTheLight).c_str());
+  aJson.addStringToObject(light, "modelid", "LST001");
   aJsonObject *state;
   aJson.addItemToObject(light, "state", state = aJson.createObject());
   unsigned int brightness = strip.GetPixelColor(numberOfTheLight - 1).CalculateBrightness();
@@ -374,6 +378,15 @@ void addLightJson(aJsonObject* root, int numberOfTheLight)
   aJson.addBooleanToObject(state, "reachable", true);
 
 }
+
+// ==============================================================================================================
+// Color Conversion
+// ==============================================================================================================
+// TODO: Consider switching to something along the lines of
+// https://github.com/patdie421/mea-edomus/blob/master/src/philipshue_color.c
+// and/ or https://github.com/kayno/arduinolifx/blob/master/color.h
+// for color coversions instead
+// ==============================================================================================================
 
 // Is this ever needed? So far it is not being used
 // Based on http://stackoverflow.com/questions/22564187/rgb-to-philips-hue-hsb
