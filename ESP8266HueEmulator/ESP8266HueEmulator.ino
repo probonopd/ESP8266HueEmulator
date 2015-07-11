@@ -1,6 +1,6 @@
 /**
  * Emulate Philips Hue Bridge ; so far the Hue app finds the emulated Bridge and gets its config
- * and switch NeoPixels with it 
+ * and switch NeoPixels with it
  **/
 
 // TODO: Change SSDP to get rid of local copies of ESP8266SSDP use the new scheme from the Arduino IDE instead
@@ -58,6 +58,7 @@ void sendJson(aJsonObject *root)
   // From https://github.com/pubnub/msp430f5529/blob/master/msp430f5529.ino
   char *msgStr = aJson.print(root);
   aJson.deleteItem(root);
+  Serial.println(millis());
   Serial.println(msgStr);
   HTTP.send(200, "text/plain", msgStr);
   free(msgStr);
@@ -65,6 +66,7 @@ void sendJson(aJsonObject *root)
 
 void handleAllOthers() {
   Serial.println("===");
+  Serial.println(millis());
   String requestedUri = HTTP.uri();
   Serial.print("requestedUri: ");
   Serial.println(requestedUri);
@@ -134,11 +136,12 @@ void handleAllOthers() {
     // If multiple ones are submitted at once, the following convention is used: xy beats ct beats hue/sat
     // TODO: Implement this
 
-    // Default values in case the request does not send new ones; TODO: Read from pixel instead!
-    int hue = 1;
-    int sat = 1;
+    // Default values in case the request does not send new ones
+    int hue = 0;
+    int sat = 255;
     int bri = 255;
 
+    // Read hue, sat, bri from pixel if available
     if (aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue"))
       hue = hueState->valueint;
     if (aJsonObject* satState = aJson.getObjectItem(parsedRoot, "sat"))
@@ -154,7 +157,7 @@ void handleAllOthers() {
     Serial.println(onValue);
 
     // define the effect to apply, in this case linear blend
-    HslColor originalColor = strip.GetPixelColor(numberOfTheLight);
+    HslColor originalColor = strip.GetPixelColor(numberOfTheLight); // FIXME: In lambda function: error: 'originalColor' was not declared in this scope - potential reason for crashes?
     if (onValue == true)
     {
       AnimUpdateCallback animUpdate = [ = ](float progress)
@@ -178,7 +181,7 @@ void handleAllOthers() {
 
     aJsonObject *root;
     root = aJson.createObject();
-    addLightJson(root, numberOfTheLight);
+    addLightJson(root, numberOfTheLight+1, rgb); // FIXME: This does not give the new color while an animation is still running
     sendJson(root);
   }
 
@@ -200,6 +203,7 @@ void handleAllOthers() {
     for (uint8_t i = 0; i < HTTP.args(); i++) Serial.printf("ARG[%u]: %s=%s\n", i, HTTP.argName(i).c_str(), HTTP.arg(i).c_str());
 
   }
+  Serial.println(millis());
 }
 
 void setup() {
@@ -227,7 +231,7 @@ void setup() {
   ipString = StringIPaddress(WiFi.localIP());
   netmaskString = StringIPaddress(WiFi.subnetMask());
   gatewayString = StringIPaddress(WiFi.gatewayIP());
-    
+
   Serial.print("Starting HTTP at ");
   Serial.print(WiFi.localIP());
   Serial.print(":");
@@ -343,40 +347,39 @@ void addConfigJson(aJsonObject *root)
   aJson.addStringToObject(swupdate, "url", "");
 }
 
-void addLightJson(aJsonObject* root, int numberOfTheLight)
+void addLightJson(aJsonObject* root, int numberOfTheLight, RgbColor rgb)
 {
   String lightName = "" + (String) numberOfTheLight;
   aJsonObject *light;
   aJson.addItemToObject(root, lightName.c_str(), light = aJson.createObject());
-  aJson.addStringToObject(light, "type", "Extended color light");
-  aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) numberOfTheLight).c_str());
-  aJson.addStringToObject(light, "modelid", "LST001");
+  aJson.addStringToObject(light, "type", "Extended color light"); // type of lamp (all "Extended colour light" for now)
+  aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) numberOfTheLight).c_str()); // // the name as set through the web UI or app
+  aJson.addStringToObject(light, "modelid", "LST001"); // the model number
   aJsonObject *state;
   aJson.addItemToObject(light, "state", state = aJson.createObject());
-  unsigned int brightness = strip.GetPixelColor(numberOfTheLight - 1).CalculateBrightness();
+  unsigned int brightness = rgb.CalculateBrightness();
   if (brightness == 0)
-  {
     aJson.addBooleanToObject(state, "on", false);
-  }
   else
-  {
     aJson.addBooleanToObject(state, "on", true);
-  }
-
-
-  RgbColor rgb = strip.GetPixelColor(numberOfTheLight - 1);
   HsbColor hsb = rgb2hsb(rgb);
-
-  aJson.addNumberToObject(state, "bri", hsb.bri); // Should be 1-254 according to Philips API
-  aJson.addNumberToObject(state, "hue", hsb.hue); // Should between 0 and 65535. Both 0 and 65535 are red, 25500 is green and 46920 is blue
-  aJson.addNumberToObject(state, "sat", hsb.sat);
+  aJson.addNumberToObject(state, "bri", hsb.bri); // brightness between 0-254 (NB 0 is not off!)
+  aJson.addNumberToObject(state, "hue", hsb.hue); // hs mode: the hue (expressed in ~deg*182.04)
+  aJson.addNumberToObject(state, "sat", hsb.sat); // hs mode: saturation between 0-254
   double numbers[2] = {0.0, 0.0};
-  aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2));
-  aJson.addStringToObject(state, "alert", "none");
-  aJson.addStringToObject(state, "effect", "none");
-  aJson.addStringToObject(state, "colormode", "hs");
-  aJson.addBooleanToObject(state, "reachable", true);
+  aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
+  aJson.addNumberToObject(state, "ct", 500); // ct mode: color temp (expressed in mireds range 154-500)
+  aJson.addStringToObject(state, "alert", "none"); // 'select' flash the lamp once, 'lselect' repeat flash for 30s
+  aJson.addStringToObject(state, "effect", "none"); // 'colorloop' makes Hue cycle through colors
+  aJson.addStringToObject(state, "colormode", "hs"); // the current color mode
+  aJson.addBooleanToObject(state, "reachable", true); // lamp can be seen by the hub
+}
 
+
+void addLightJson(aJsonObject* root, int numberOfTheLight)
+{
+  RgbColor rgb = strip.GetPixelColor(numberOfTheLight - 1);
+  addLightJson(root, numberOfTheLight, rgb);
 }
 
 // ==============================================================================================================
@@ -414,31 +417,26 @@ struct xy getRGBtoXY(RgbColor color)
   normalizedToOneBlue = (color.B / 255);
 
   float red, green, blue;
+ /* 
+    // Make red more vivid
+    if (normalizedToOneRed > 0.04045)
+      red = (float) pow((normalizedToOneRed + 0.055) / (1.0 + 0.055), 2.4);
+    else
+      red = (float) (normalizedToOneRed / 12.92);
 
-  // Make red more vivid
-  if (normalizedToOneRed > 0.04045) {
-    red = (float) pow(
-            (normalizedToOneRed + 0.055) / (1.0 + 0.055), 2.4);
-  } else {
-    red = (float) (normalizedToOneRed / 12.92);
-  }
+    // Make green more vivid
+    if (normalizedToOneGreen > 0.04045)
+      green = (float) pow((normalizedToOneGreen + 0.055) / (1.0 + 0.055), 2.4);
+    else
+      green = (float) (normalizedToOneGreen / 12.92);
 
-  // Make green more vivid
-  if (normalizedToOneGreen > 0.04045) {
-    green = (float) pow((normalizedToOneGreen + 0.055)
-                        / (1.0 + 0.055), 2.4);
-  } else {
-    green = (float) (normalizedToOneGreen / 12.92);
-  }
-
-  // Make blue more vivid
-  if (normalizedToOneBlue > 0.04045) {
-    blue = (float) pow((normalizedToOneBlue + 0.055)
-                       / (1.0 + 0.055), 2.4);
-  } else {
-    blue = (float) (normalizedToOneBlue / 12.92);
-  }
-
+    // Make blue more vivid
+    if (normalizedToOneBlue > 0.04045)
+      blue = (float) pow((normalizedToOneBlue + 0.055) / (1.0 + 0.055), 2.4);
+    else
+      blue = (float) (normalizedToOneBlue / 12.92);
+*/
+  
   float X = (float) (red * 0.649926 + green * 0.103455 + blue * 0.197109);
   float Y = (float) (red * 0.234327 + green * 0.743075 + blue * 0.022598);
   float Z = (float) (red * 0.0000000 + green * 0.053077 + blue * 1.035763);
@@ -469,27 +467,29 @@ void rgb2xy(int R, int G, int B)
 
 struct HsbColor rgb2hsb(RgbColor color)
 {
-
+  Serial.println("Running rgb2hsb");
   struct HsbColor hsb_instance;
   int hue, sat, bri;
-
+  
+  Serial.println("1.: H, S, L - this seems correct");
   HslColor hsl = HslColor(color);
-  //  Serial.print("H = ");
-  //  Serial.println(hsl.H);
-  //  Serial.print("S = ");
-  //  Serial.println(hsl.S);
-  //  Serial.print("L = ");
-  //  Serial.println(hsl.L);
+  Serial.print("H = ");
+  Serial.println(hsl.H);
+  Serial.print("S = ");
+  Serial.println(hsl.S);
+  Serial.print("L = ");
+  Serial.println(hsl.L);
 
+  Serial.println("2.: Convert to hue, sat, bri");
   hue = floor(hsl.H * 65535);
   sat = floor(hsl.S * 255);
   bri = floor(hsl.L * 2.55);
-  //  Serial.print("hue = ");
-  //  Serial.println(hue);
-  //  Serial.print("sat = ");
-  //  Serial.println(sat);
-  //  Serial.print("bri = ");
-  //  Serial.println(bri);
+  Serial.print("hue = ");
+  Serial.println(hue);
+  Serial.print("sat = ");
+  Serial.println(sat);
+  Serial.print("bri = ");
+  Serial.println(bri);
 
   hsb_instance.hue = hue;
   hsb_instance.sat = sat;
@@ -500,6 +500,8 @@ struct HsbColor rgb2hsb(RgbColor color)
 
 RgbColor hsb2rgb(int hue, int sat, int bri)
 {
+  Serial.println("Running hsb2rgb");
+  Serial.println("1.: hue, sat, bri");
   Serial.print("hue = ");
   Serial.println(hue);
   Serial.print("sat = ");
@@ -507,7 +509,8 @@ RgbColor hsb2rgb(int hue, int sat, int bri)
   Serial.print("bri = ");
   Serial.println(bri);
 
-  double H, S, L;
+  Serial.println("2.: Convert to H, S, L");
+  float H, S, L;
   H = hue / 65535.0;
   Serial.print("H = ");
   Serial.println(H);
@@ -519,6 +522,7 @@ RgbColor hsb2rgb(int hue, int sat, int bri)
   Serial.println(L);
   HslColor hsl = HslColor(H, S, L);
 
+  Serial.println("3.: Convert to RgbColor - I think here is where things go wrong");
   RgbColor rgb = RgbColor(hsl);
   Serial.print("R = ");
   Serial.println(rgb.R);
@@ -526,7 +530,6 @@ RgbColor hsb2rgb(int hue, int sat, int bri)
   Serial.println(rgb.G);
   Serial.print("B = ");
   Serial.println(rgb.B);
-  Serial.println("FIXME: Hue is a bit off - why?");
 
   return rgb;
 }
