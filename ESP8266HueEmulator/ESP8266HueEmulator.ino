@@ -130,6 +130,8 @@ void handleAllOthers() {
 
     RgbColor rgb;
 
+    // FIXME: Right now this code crashes the ESP when the hue app is used to change the brightness.
+    // FIXME: The hue app sends only bri and on when one changes the brightness; so we cannot assume there is hue in the request and need to get the hue from somewhere else!
     if (HTTP.arg("plain").length() > 30 )  // FIXME: Find a cleaner way to do this, can't aJson determine whether a key is present?
     {
       Serial.println("REQUEST CONTAINS HUE");
@@ -459,28 +461,26 @@ void rgb2xy(int R, int G, int B)
 struct HsbColor rgb2hsb(RgbColor color)
 {
 
-  Serial.println("FIXME HERE!");
-
   struct HsbColor hsb_instance;
   int hue, sat, bri;
 
   HslColor hsl = HslColor(color);
-  Serial.print("H = ");
-  Serial.println(hsl.H);
-  Serial.print("S = ");
-  Serial.println(hsl.S);
-  Serial.print("L = ");
-  Serial.println(hsl.L);
+  //  Serial.print("H = ");
+  //  Serial.println(hsl.H);
+  //  Serial.print("S = ");
+  //  Serial.println(hsl.S);
+  //  Serial.print("L = ");
+  //  Serial.println(hsl.L);
 
   hue = floor(hsl.H * 65535);
-  Serial.print("hue = ");
-  Serial.println(hue);
   sat = floor(hsl.S * 255);
-  Serial.print("sat = ");
-  Serial.println(sat);
   bri = floor(hsl.L * 2.55);
-  Serial.print("bri = ");
-  Serial.println(bri);
+  //  Serial.print("hue = ");
+  //  Serial.println(hue);
+  //  Serial.print("sat = ");
+  //  Serial.println(sat);
+  //  Serial.print("bri = ");
+  //  Serial.println(bri);
 
   hsb_instance.hue = hue;
   hsb_instance.sat = sat;
