@@ -16,9 +16,9 @@ Please note that currently only the bare minimum to advertise the emulated Hue b
 * Optionally connect the DATA line of your WS2812b NeoPixels to pin GPIO2 (you do not really need this in order to test communication between the sketch and Hue client apps)
 * Watch the output of the sketch in a serial console
 * Connect to the emulated bridge by using a Hue client app
-* Switch on one of the 3 lights
+* Switch on one of the lights
 * Continue watching the output of the sketch in a serial console
-* Implement a state for each bulb and implement more of the protocol
+* Implement more of the protocol
 * Contribute pull requests ;-)
 
 ## Credits
@@ -27,3 +27,4 @@ Please note that currently only the bare minimum to advertise the emulated Hue b
 * igrr for bringing the ESP8266 platform to the Arduino IDE
 * me-no-dev for porting the uSSDP library to the ESP8266 platform and helping me make this work
 * Makuna for the [NeoPixelBus](https://github.com/Makuna/NeoPixelBus) library supporting WS2812b NeoPixels on the ESP8266
+* interactive-matter for the [aJson](https://github.com/interactive-matter/aJson) library
