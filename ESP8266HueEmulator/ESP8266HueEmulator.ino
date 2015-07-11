@@ -128,19 +128,30 @@ void handleAllOthers() {
     aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
     bool onValue = onState->valuebool;
 
-    aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue");
-    int hue = hueState->valueint;
-    aJsonObject* satState = aJson.getObjectItem(parsedRoot, "sat");
-    int sat = satState->valueint;
-    aJsonObject* briState = aJson.getObjectItem(parsedRoot, "bri");
-    int bri = briState->valueint;
     RgbColor rgb;
-    rgb = hsb2rgb(hue, sat, bri);
 
+    if (HTTP.arg("plain").length() > 30 )  // FIXME: Find a cleaner way to do this, can't aJson determine whether a key is present?
+    {
+      Serial.println("REQUEST CONTAINS HUE");
+      aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue");
+      int hue = hueState->valueint;
+      aJsonObject* satState = aJson.getObjectItem(parsedRoot, "sat");
+      int sat = satState->valueint;
+      aJsonObject* briState = aJson.getObjectItem(parsedRoot, "bri");
+      int bri = briState->valueint;
+      RgbColor rgb;
+      rgb = hsb2rgb(hue, sat, bri);
+    }
+    else
+    {
+      Serial.println("REQUEST DOES NOT CONTAIN HUE AND WE MIGHT NOT HAVE IT");
+      rgb = white; // FIXME: Where should I get the RGB from in this case? From the pixel... But if it was off then the pixel doesn't know it. Need to maintain a state in the sketch?
+    }
 
     aJson.deleteItem(parsedRoot);
     Serial.print("I should --> ");
     Serial.println(onValue);
+
     // define the effect to apply, in this case linear blend
     HslColor originalColor = strip.GetPixelColor(numberOfTheLight);
     if (onValue == true)
@@ -349,9 +360,14 @@ void addLightJson(aJsonObject* root, int numberOfTheLight)
   {
     aJson.addBooleanToObject(state, "on", true);
   }
-  aJson.addNumberToObject(state, "bri", 254); // Should be 1-254 according to Philips API
-  aJson.addNumberToObject(state, "hue", 0); // Should between 0 and 65535. Both 0 and 65535 are red, 25500 is green and 46920 is blue
-  aJson.addNumberToObject(state, "sat", 0);
+
+
+  RgbColor rgb = strip.GetPixelColor(numberOfTheLight - 1);
+  HsbColor hsb = rgb2hsb(rgb);
+
+  aJson.addNumberToObject(state, "bri", hsb.bri); // Should be 1-254 according to Philips API
+  aJson.addNumberToObject(state, "hue", hsb.hue); // Should between 0 and 65535. Both 0 and 65535 are red, 25500 is green and 46920 is blue
+  aJson.addNumberToObject(state, "sat", hsb.sat);
   double numbers[2] = {0.0, 0.0};
   aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2));
   aJson.addStringToObject(state, "alert", "none");
@@ -440,12 +456,22 @@ void rgb2xy(int R, int G, int B)
   float y = Y / (X + Y + Z);
 }
 
-// Is this ever needed? So far it is not being used
-void rgb2hsb(int R, int G, int B)
+struct HsbColor rgb2hsb(RgbColor color)
 {
+
+  Serial.println("FIXME HERE!");
+
+  struct HsbColor hsb_instance;
   int hue, sat, bri;
-  RgbColor rgb = RgbColor(R, G, B);
-  HslColor hsl = HslColor(rgb);
+
+  HslColor hsl = HslColor(color);
+  Serial.print("H = ");
+  Serial.println(hsl.H);
+  Serial.print("S = ");
+  Serial.println(hsl.S);
+  Serial.print("L = ");
+  Serial.println(hsl.L);
+
   hue = floor(hsl.H * 65535);
   Serial.print("hue = ");
   Serial.println(hue);
@@ -455,6 +481,12 @@ void rgb2hsb(int R, int G, int B)
   bri = floor(hsl.L * 2.55);
   Serial.print("bri = ");
   Serial.println(bri);
+
+  hsb_instance.hue = hue;
+  hsb_instance.sat = sat;
+  hsb_instance.bri = bri;
+
+  return (hsb_instance);
 }
 
 RgbColor hsb2rgb(int hue, int sat, int bri)
@@ -477,7 +509,7 @@ RgbColor hsb2rgb(int hue, int sat, int bri)
   Serial.print("L = ");
   Serial.println(L);
   HslColor hsl = HslColor(H, S, L);
-  
+
   RgbColor rgb = RgbColor(hsl);
   Serial.print("R = ");
   Serial.println(rgb.R);
@@ -485,8 +517,8 @@ RgbColor hsb2rgb(int hue, int sat, int bri)
   Serial.println(rgb.G);
   Serial.print("B = ");
   Serial.println(rgb.B);
-  Serial.println("FIXME: This is not quite working yet - why?");
-  
+  Serial.println("FIXME: Hue is a bit off - why?");
+
   return rgb;
 }
 
