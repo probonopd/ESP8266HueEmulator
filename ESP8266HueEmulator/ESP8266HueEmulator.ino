@@ -102,7 +102,7 @@ void handleAllOthers() {
     // We try to execute successfully regardless of a button for now.
   {
     isAuthorized = true; // FIXME: Instead, we should persist (save) the username and put it on the whitelist
-    client = subStr(requestedUri.c_str(), "/", 2);
+    client = subStr(requestedUri.c_str(), "/", 1);
     Serial.println("CLIENT: ");
     Serial.println(client);
 
@@ -467,10 +467,10 @@ RgbColor hsb2rgb(int hue, int sat, int bri)
   Serial.println(bri);
 
   double H, S, L;
-  H = (hue / 65535) + 0.5;
+  H = hue / 65535.0;
   Serial.print("H = ");
   Serial.println(H);
-  S = (sat / 255) ;
+  S = sat / 255.0;
   Serial.print("S = ");
   Serial.println(S);
   L = bri / 2.55;
