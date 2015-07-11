@@ -23,7 +23,7 @@ Please note that currently only the bare minimum to advertise the emulated Hue b
 
 ## Credits
 
-* Philips for providing open Hue APIs that are not restricted for use on Philips-branded hardware (as far as I can see by looking at their liberal Terms and Conditions of Use)
+* Philips for providing open Hue APIs that are not restricted for use on Philips-branded hardware (as far as I can see by looking at their liberal [Terms and Conditions of Use](https://github.com/probonopd/ESP8266HueEmulator/wiki/Discovery#terms-and-conditions-of-use))
 * igrr for bringing the ESP8266 platform to the Arduino IDE
 * me-no-dev for porting the uSSDP library to the ESP8266 platform and helping me make this work
 * Makuna for the [NeoPixelBus](https://github.com/Makuna/NeoPixelBus) library supporting WS2812b NeoPixels on the ESP8266
