@@ -44,6 +44,8 @@ bool isAuthorized = false;
 byte mac[6]; // MAC address
 String macString;
 String ipString;
+String netmaskString;
+String gatewayString;
 
 ESP8266WebServer HTTP(80);
 
@@ -128,27 +130,20 @@ void handleAllOthers() {
     aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
     bool onValue = onState->valuebool;
 
-    RgbColor rgb;
+    // Default values in case the request does not send new ones; TODO: Read from pixel instead!
+    int hue = 1;
+    int sat = 1;
+    int bri = 255;
 
-    // FIXME: Right now this code crashes the ESP when the hue app is used to change the brightness.
-    // FIXME: The hue app sends only bri and on when one changes the brightness; so we cannot assume there is hue in the request and need to get the hue from somewhere else!
-    if (HTTP.arg("plain").length() > 30 )  // FIXME: Find a cleaner way to do this, can't aJson determine whether a key is present?
-    {
-      Serial.println("REQUEST CONTAINS HUE");
-      aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue");
-      int hue = hueState->valueint;
-      aJsonObject* satState = aJson.getObjectItem(parsedRoot, "sat");
-      int sat = satState->valueint;
-      aJsonObject* briState = aJson.getObjectItem(parsedRoot, "bri");
-      int bri = briState->valueint;
-      RgbColor rgb;
-      rgb = hsb2rgb(hue, sat, bri);
-    }
-    else
-    {
-      Serial.println("REQUEST DOES NOT CONTAIN HUE AND WE MIGHT NOT HAVE IT");
-      rgb = white; // FIXME: Where should I get the RGB from in this case? From the pixel... But if it was off then the pixel doesn't know it. Need to maintain a state in the sketch?
-    }
+    if (aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue"))
+      hue = hueState->valueint;
+    if (aJsonObject* satState = aJson.getObjectItem(parsedRoot, "sat"))
+      sat = satState->valueint;
+    if (aJsonObject* briState = aJson.getObjectItem(parsedRoot, "bri"))
+      bri = briState->valueint;
+
+    RgbColor rgb;
+    rgb = hsb2rgb(hue, sat, bri);
 
     aJson.deleteItem(parsedRoot);
     Serial.print("I should --> ");
@@ -225,8 +220,10 @@ void setup() {
   }
 
   macString = String(WiFi.macAddress());
-  ipString = StringIPaddress();
-
+  ipString = StringIPaddress(WiFi.localIP());
+  netmaskString = StringIPaddress(WiFi.subnetMask());
+  gatewayString = StringIPaddress(WiFi.gatewayIP());
+    
   Serial.print("Starting HTTP at ");
   Serial.print(WiFi.localIP());
   Serial.print(":");
@@ -302,10 +299,9 @@ char* subStr(const char* str, char *delim, int index) {
   return sub;
 }
 
-String StringIPaddress()
+String StringIPaddress(IPAddress myaddr)
 {
   String LocalIP = "";
-  IPAddress myaddr = WiFi.localIP();
   for (int i = 0; i < 4; i++)
   {
     LocalIP += String(myaddr[i]);
@@ -318,15 +314,15 @@ void addConfigJson(aJsonObject *root)
 {
   aJson.addStringToObject(root, "name", "Philips hue");
   aJson.addStringToObject(root, "swversion", "01005215");
-  aJson.addBooleanToObject(root, "portalservices", false);
-  aJson.addStringToObject(root, "zigbeechannel", "0"); // As per spec, 0 is allowed
+  // aJson.addBooleanToObject(root, "portalservices", false);
+  // aJson.addStringToObject(root, "zigbeechannel", "0"); // As per spec, 0 is allowed
   aJson.addStringToObject(root, "mac", macString.c_str());
   aJson.addBooleanToObject(root, "dhcp", true);
   aJson.addStringToObject(root, "ipaddress", ipString.c_str());
-  aJson.addStringToObject(root, "netmask", "255.255.255.0"); // TODO: FIXME
-  aJson.addStringToObject(root, "gateway", "192.168.0.1"); // TODO: FIXME
-  aJson.addStringToObject(root, "proxyaddress", "");
-  aJson.addNumberToObject(root, "proxyport", 0);
+  aJson.addStringToObject(root, "netmask", netmaskString.c_str());
+  aJson.addStringToObject(root, "gateway", gatewayString.c_str());
+  // aJson.addStringToObject(root, "proxyaddress", ""); // Seems not required by client app
+  // aJson.addNumberToObject(root, "proxyport", 0); // Seems not required by client app
   aJson.addStringToObject(root, "UTC", "2012-10-29T12:05:00");
   aJsonObject *whitelist;
   aJson.addItemToObject(root, "whitelist", whitelist = aJson.createObject());
@@ -338,7 +334,7 @@ void addConfigJson(aJsonObject *root)
   aJsonObject *swupdate;
   aJson.addItemToObject(root, "swupdate", swupdate = aJson.createObject());
   aJson.addStringToObject(swupdate, "text", "");
-  aJson.addBooleanToObject(swupdate, "notify", false);
+  aJson.addBooleanToObject(swupdate, "notify", false); // Otherwise client app shows update notice
   aJson.addNumberToObject(swupdate, "updatestate", 0);
   aJson.addStringToObject(swupdate, "url", "");
 }
