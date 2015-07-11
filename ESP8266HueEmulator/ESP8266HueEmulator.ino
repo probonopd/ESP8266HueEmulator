@@ -16,7 +16,8 @@
 #include "ESP8266SSDP.h"
 #include <NeoPixelBus.h> // NeoPixelAnimator branch
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there
-
+#include "xy.h"
+#include <math.h>
 
 
 #include "/secrets.h" // Delete this line and populate the following
@@ -37,13 +38,6 @@ unsigned int transitionTime = 800; // by default there is a transition time to t
 NeoPixelBus strip = NeoPixelBus(pixelCount, pixelPin);
 NeoPixelAnimator animator(&strip); // NeoPixel animation management object
 
-/// X, Y, Z and x, y are values to desvribe colors
-float X;
-float Y;
-float Z;
-float x;
-float y;
-
 // Determines wheter a client is already authorized
 bool isAuthorized = false;
 
@@ -53,8 +47,8 @@ String ipString;
 
 ESP8266WebServer HTTP(80);
 
-String client = "e7x4kuCaC8h885jo"; // The client name that the sketch gives to the app
-// FIXME: Parse this out of what is being sent by the app.
+// The username of the client (currently we authorize all clients simulating a pressed button on the bridge)
+String client;
 
 void sendJson(aJsonObject *root)
 {
@@ -108,6 +102,10 @@ void handleAllOthers() {
     // We try to execute successfully regardless of a button for now.
   {
     isAuthorized = true; // FIXME: Instead, we should persist (save) the username and put it on the whitelist
+    client = subStr(requestedUri.c_str(), "/", 2);
+    Serial.println("CLIENT: ");
+    Serial.println(client);
+
     String str = "[{\"success\":{\"username\": \"" + client + "\"}}]";
     HTTP.send(200, "text/plain", str);
     Serial.println(str);
@@ -129,6 +127,17 @@ void handleAllOthers() {
     aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
     aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
     bool onValue = onState->valuebool;
+
+    aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue");
+    int hue = hueState->valueint;
+    aJsonObject* satState = aJson.getObjectItem(parsedRoot, "sat");
+    int sat = satState->valueint;
+    aJsonObject* briState = aJson.getObjectItem(parsedRoot, "bri");
+    int bri = briState->valueint;
+    RgbColor rgb;
+    rgb = hsb2rgb(hue, sat, bri);
+
+
     aJson.deleteItem(parsedRoot);
     Serial.print("I should --> ");
     Serial.println(onValue);
@@ -139,7 +148,7 @@ void handleAllOthers() {
       AnimUpdateCallback animUpdate = [ = ](float progress)
       {
         // progress will start at 0.0 and end at 1.0
-        HslColor updatedColor = HslColor::LinearBlend(originalColor, white, progress);
+        HslColor updatedColor = HslColor::LinearBlend(originalColor, rgb, progress);
         strip.SetPixelColor(numberOfTheLight, updatedColor);
       };
       animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
@@ -251,18 +260,6 @@ void loop() {
   }
 }
 
-void rgb2xy(int R, int G, int B)
-{
-  // Convert the RGB values to XYZ using the Wide RGB D65 conversion formula
-  float X = R * 0.664511f + G * 0.154324f + B * 0.162028f;
-  float Y = R * 0.283881f + G * 0.668433f + B * 0.047685f;
-  float Z = R * 0.000088f + G * 0.072310f + B * 0.986039f;
-
-  // Calculate the xy values from the XYZ values
-  float x = X / (X + Y + Z);
-  float y = Y / (X + Y + Z);
-}
-
 // See https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/commit/00187a3db88dedd640f5ddfa8a474458dff4e1db for more needed color conversions
 
 void infoLight(RgbColor color) {
@@ -321,7 +318,7 @@ void addConfigJson(aJsonObject *root)
   aJsonObject *whitelist;
   aJson.addItemToObject(root, "whitelist", whitelist = aJson.createObject());
   aJsonObject *whitelistFirstEntry;
-  aJson.addItemToObject(whitelist, "e7x4kuCaC8h885jo", whitelistFirstEntry = aJson.createObject()); // FIXME: Do not hardcode e7x4kuCaC8h885jo
+  aJson.addItemToObject(whitelist, client.c_str(), whitelistFirstEntry = aJson.createObject());
   aJson.addStringToObject(whitelistFirstEntry, "name", "clientname#devicename");
   aJson.addStringToObject(whitelistFirstEntry, "last use date", "2015-07-05T16:48:18");
   aJson.addStringToObject(whitelistFirstEntry, "create date", "2015-07-05T16:48:17");
@@ -363,3 +360,133 @@ void addLightJson(aJsonObject* root, int numberOfTheLight)
   aJson.addBooleanToObject(state, "reachable", true);
 
 }
+
+// Is this ever needed? So far it is not being used
+// Based on http://stackoverflow.com/questions/22564187/rgb-to-philips-hue-hsb
+// The code is based on this brilliant note: https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/commit/f41091cf671e13fe8c32fcced12604cd31cceaf3
+
+struct xy getRGBtoXY(RgbColor color)
+{
+  struct xy xy_instance;
+
+  // https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/commit/f41091cf671e13fe8c32fcced12604cd31cceaf3
+  //-For the hue bulb the corners of the triangle are:
+  //-Red: 0.675, 0.322
+  //-Green: 0.4091, 0.518
+  //-Blue: 0.167, 0.04
+  //-
+  //-For LivingColors Bloom, Aura and Iris the triangle corners are:
+  //-Red: 0.704, 0.296
+  //-Green: 0.2151, 0.7106
+  //-Blue: 0.138, 0.08
+
+  float normalizedToOneRed, normalizedToOneGreen, normalizedToOneBlue;
+
+  normalizedToOneRed = (color.R / 255);
+  normalizedToOneGreen = (color.G / 255);
+  normalizedToOneBlue = (color.B / 255);
+
+  float red, green, blue;
+
+  // Make red more vivid
+  if (normalizedToOneRed > 0.04045) {
+    red = (float) pow(
+            (normalizedToOneRed + 0.055) / (1.0 + 0.055), 2.4);
+  } else {
+    red = (float) (normalizedToOneRed / 12.92);
+  }
+
+  // Make green more vivid
+  if (normalizedToOneGreen > 0.04045) {
+    green = (float) pow((normalizedToOneGreen + 0.055)
+                        / (1.0 + 0.055), 2.4);
+  } else {
+    green = (float) (normalizedToOneGreen / 12.92);
+  }
+
+  // Make blue more vivid
+  if (normalizedToOneBlue > 0.04045) {
+    blue = (float) pow((normalizedToOneBlue + 0.055)
+                       / (1.0 + 0.055), 2.4);
+  } else {
+    blue = (float) (normalizedToOneBlue / 12.92);
+  }
+
+  float X = (float) (red * 0.649926 + green * 0.103455 + blue * 0.197109);
+  float Y = (float) (red * 0.234327 + green * 0.743075 + blue * 0.022598);
+  float Z = (float) (red * 0.0000000 + green * 0.053077 + blue * 1.035763);
+
+  float x = X / (X + Y + Z);
+  float y = Y / (X + Y + Z);
+
+  xy_instance.x = x;
+  Serial.print("x = ");
+  Serial.println(x);
+  xy_instance.y = y;
+  Serial.print("y = ");
+  Serial.println(y);
+}
+
+// Is this ever needed? So far it is not being used
+void rgb2xy(int R, int G, int B)
+{
+  // Convert the RGB values to XYZ using the Wide RGB D65 conversion formula
+  float X = R * 0.664511f + G * 0.154324f + B * 0.162028f;
+  float Y = R * 0.283881f + G * 0.668433f + B * 0.047685f;
+  float Z = R * 0.000088f + G * 0.072310f + B * 0.986039f;
+
+  // Calculate the xy values from the XYZ values
+  float x = X / (X + Y + Z);
+  float y = Y / (X + Y + Z);
+}
+
+// Is this ever needed? So far it is not being used
+void rgb2hsb(int R, int G, int B)
+{
+  int hue, sat, bri;
+  RgbColor rgb = RgbColor(R, G, B);
+  HslColor hsl = HslColor(rgb);
+  hue = floor(hsl.H * 65535);
+  Serial.print("hue = ");
+  Serial.println(hue);
+  sat = floor(hsl.S * 255);
+  Serial.print("sat = ");
+  Serial.println(sat);
+  bri = floor(hsl.L * 2.55);
+  Serial.print("bri = ");
+  Serial.println(bri);
+}
+
+RgbColor hsb2rgb(int hue, int sat, int bri)
+{
+  Serial.print("hue = ");
+  Serial.println(hue);
+  Serial.print("sat = ");
+  Serial.println(sat);
+  Serial.print("bri = ");
+  Serial.println(bri);
+
+  double H, S, L;
+  H = (hue / 65535) + 0.5;
+  Serial.print("H = ");
+  Serial.println(H);
+  S = (sat / 255) ;
+  Serial.print("S = ");
+  Serial.println(S);
+  L = bri / 2.55;
+  Serial.print("L = ");
+  Serial.println(L);
+  HslColor hsl = HslColor(H, S, L);
+  
+  RgbColor rgb = RgbColor(hsl);
+  Serial.print("R = ");
+  Serial.println(rgb.R);
+  Serial.print("G = ");
+  Serial.println(rgb.G);
+  Serial.print("B = ");
+  Serial.println(rgb.B);
+  Serial.println("FIXME: This is not quite working yet - why?");
+  
+  return rgb;
+}
+
