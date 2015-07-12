@@ -137,9 +137,9 @@ void handleAllOthers() {
     // TODO: Implement this
 
     // Default values in case the request does not send new ones
-    int hue = 0;
-    int sat = 255;
-    int bri = 255;
+    int hue = 1; // 10000; // 10000 is white
+    int sat = 254;
+    int bri = 254;
 
     // Read hue, sat, bri from pixel if available
     if (aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue"))
@@ -181,7 +181,7 @@ void handleAllOthers() {
 
     aJsonObject *root;
     root = aJson.createObject();
-    addLightJson(root, numberOfTheLight+1, rgb); // FIXME: This does not give the new color while an animation is still running
+    addLightJson(root, numberOfTheLight + 1, rgb); // FIXME: This does not give the new color while an animation is still running
     sendJson(root);
   }
 
@@ -363,8 +363,8 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, RgbColor rgb)
   else
     aJson.addBooleanToObject(state, "on", true);
   HsbColor hsb = rgb2hsb(rgb);
-  aJson.addNumberToObject(state, "bri", hsb.bri); // brightness between 0-254 (NB 0 is not off!)
   aJson.addNumberToObject(state, "hue", hsb.hue); // hs mode: the hue (expressed in ~deg*182.04)
+  aJson.addNumberToObject(state, "bri", hsb.bri); // brightness between 0-254 (NB 0 is not off!)
   aJson.addNumberToObject(state, "sat", hsb.sat); // hs mode: saturation between 0-254
   double numbers[2] = {0.0, 0.0};
   aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
@@ -399,13 +399,15 @@ struct xy getRGBtoXY(RgbColor color)
 {
   struct xy xy_instance;
 
+  // RGB strips LST001 are "Gamut A" models while original bulbs LCT001 are "Gamut B"
+
   // https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/commit/f41091cf671e13fe8c32fcced12604cd31cceaf3
-  //-For the hue bulb the corners of the triangle are:
+  //-For the hue bulb the corners of the triangle are "Gamut B":
   //-Red: 0.675, 0.322
   //-Green: 0.4091, 0.518
   //-Blue: 0.167, 0.04
   //-
-  //-For LivingColors Bloom, Aura and Iris the triangle corners are:
+  //-For LivingColors Bloom, Aura and Iris the triangle corners are "Gamut A":
   //-Red: 0.704, 0.296
   //-Green: 0.2151, 0.7106
   //-Blue: 0.138, 0.08
@@ -417,26 +419,26 @@ struct xy getRGBtoXY(RgbColor color)
   normalizedToOneBlue = (color.B / 255);
 
   float red, green, blue;
- /* 
-    // Make red more vivid
-    if (normalizedToOneRed > 0.04045)
-      red = (float) pow((normalizedToOneRed + 0.055) / (1.0 + 0.055), 2.4);
-    else
-      red = (float) (normalizedToOneRed / 12.92);
+  /*
+     // Make red more vivid
+     if (normalizedToOneRed > 0.04045)
+       red = (float) pow((normalizedToOneRed + 0.055) / (1.0 + 0.055), 2.4);
+     else
+       red = (float) (normalizedToOneRed / 12.92);
 
-    // Make green more vivid
-    if (normalizedToOneGreen > 0.04045)
-      green = (float) pow((normalizedToOneGreen + 0.055) / (1.0 + 0.055), 2.4);
-    else
-      green = (float) (normalizedToOneGreen / 12.92);
+     // Make green more vivid
+     if (normalizedToOneGreen > 0.04045)
+       green = (float) pow((normalizedToOneGreen + 0.055) / (1.0 + 0.055), 2.4);
+     else
+       green = (float) (normalizedToOneGreen / 12.92);
 
-    // Make blue more vivid
-    if (normalizedToOneBlue > 0.04045)
-      blue = (float) pow((normalizedToOneBlue + 0.055) / (1.0 + 0.055), 2.4);
-    else
-      blue = (float) (normalizedToOneBlue / 12.92);
-*/
-  
+     // Make blue more vivid
+     if (normalizedToOneBlue > 0.04045)
+       blue = (float) pow((normalizedToOneBlue + 0.055) / (1.0 + 0.055), 2.4);
+     else
+       blue = (float) (normalizedToOneBlue / 12.92);
+  */
+
   float X = (float) (red * 0.649926 + green * 0.103455 + blue * 0.197109);
   float Y = (float) (red * 0.234327 + green * 0.743075 + blue * 0.022598);
   float Z = (float) (red * 0.0000000 + green * 0.053077 + blue * 1.035763);
@@ -470,7 +472,7 @@ struct HsbColor rgb2hsb(RgbColor color)
   Serial.println("Running rgb2hsb");
   struct HsbColor hsb_instance;
   int hue, sat, bri;
-  
+
   Serial.println("1.: H, S, L - this seems correct");
   HslColor hsl = HslColor(color);
   Serial.print("H = ");
@@ -480,10 +482,10 @@ struct HsbColor rgb2hsb(RgbColor color)
   Serial.print("L = ");
   Serial.println(hsl.L);
 
-  Serial.println("2.: Convert to hue, sat, bri");
-  hue = floor(hsl.H * 65535);
-  sat = floor(hsl.S * 255);
-  bri = floor(hsl.L * 2.55);
+  Serial.println("2.: Convert to hue, sat, bri - I think here is where things go wrong too");
+  hue = floor(hsl.H * 182.04);
+  sat = floor(hsl.S * 254);
+  bri = floor(hsl.L * 254);
   Serial.print("hue = ");
   Serial.println(hue);
   Serial.print("sat = ");
@@ -501,7 +503,7 @@ struct HsbColor rgb2hsb(RgbColor color)
 RgbColor hsb2rgb(int hue, int sat, int bri)
 {
   Serial.println("Running hsb2rgb");
-  Serial.println("1.: hue, sat, bri");
+  Serial.println("1.: hue, sat, bri - I think so far it is correct");
   Serial.print("hue = ");
   Serial.println(hue);
   Serial.print("sat = ");
@@ -509,20 +511,21 @@ RgbColor hsb2rgb(int hue, int sat, int bri)
   Serial.print("bri = ");
   Serial.println(bri);
 
-  Serial.println("2.: Convert to H, S, L");
+  Serial.println("2.: Convert to H, S, L - I think so far it is still correct");
   float H, S, L;
-  H = hue / 65535.0;
+  H = hue / 182.04;
   Serial.print("H = ");
   Serial.println(H);
-  S = sat / 255.0;
+  S = sat / 254.0; // I changed this
   Serial.print("S = ");
   Serial.println(S);
-  L = bri / 2.55;
+  L = bri / 254.0; // I changed this as well
   Serial.print("L = ");
   Serial.println(L);
   HslColor hsl = HslColor(H, S, L);
 
   Serial.println("3.: Convert to RgbColor - I think here is where things go wrong");
+  // RgbColor rgb = hsl2rgb(hsl);
   RgbColor rgb = RgbColor(hsl);
   Serial.print("R = ");
   Serial.println(rgb.R);
@@ -532,5 +535,51 @@ RgbColor hsb2rgb(int hue, int sat, int bri)
   Serial.println(rgb.B);
 
   return rgb;
+}
+
+// Based on http://courses.ischool.berkeley.edu/i262/f13/content/clemensmeyer/lab-3-potentiometers-hsl-rgb
+RgbColor hsl2rgb (HslColor color)
+{
+  float h = color.H;
+  float s = color.S;
+  float l = color.L;
+  float q = 0;
+  float t = 0;
+  int r;
+  int g;
+  int b;
+  if (s == 0) {
+    Serial.print("l=");
+    Serial.println(l);
+    r = g = b = (l * 2.55) + 0.5; //achromatic; I multiplied by 2.55 because otherwise I never get over 100
+    Serial.print("r=g=b=");
+    Serial.println(r);
+  } else {
+    if (l < 0.5) {
+      q = l * (1 + s);
+    } else {
+      q = l + s - l * s;
+    }
+    float p = 2 * l - q;
+    r = hue2rgb(p, q, h + 0.33) * 255;
+    g = hue2rgb(p, q, h) * 255;
+    b = hue2rgb(p, q, h - 0.33) * 255;
+  }
+  return RgbColor(r, g, b);
+}
+
+float hue2rgb (float p, float q, float t)
+{
+  if (t < 0)
+    t += 1;
+  if (t > 1)
+    t -= 1;
+  if (t < 0.17)
+    return p + (q - p) * 6 * t;
+  if (t < 0.5)
+    return q;
+  if (t < 0.67)
+    return p + (q - p) * (0.67 - t) * 6;
+  return p;
 }
 
