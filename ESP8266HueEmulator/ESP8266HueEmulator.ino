@@ -13,9 +13,9 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <WiFiUDP.h>
-#include "ESP8266SSDP.h"
+#include <ESP8266SSDP.h>
 #include <NeoPixelBus.h> // NeoPixelAnimator branch
-#include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there
+#include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
 #include "xy.h"
 #include <math.h>
 
@@ -267,7 +267,6 @@ void loop() {
   // We might bring this question up on the esp8266/arduino chat to see if there is support
   // to thread off the networking stuff; but in general, we don't have a multitasking core.
   HTTP.handleClient();
-  SSDP.update();
 
   static unsigned long update_strip_time = 0;  //  keeps track of pixel refresh rate... limits updates to 33 Hz
   if (millis() - update_strip_time > 30)
