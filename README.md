@@ -11,7 +11,7 @@ Please note that currently only the bare minimum to advertise the emulated Hue b
 
 ## Usage
 
-* Build [esp8266/Arduino](https://github.com/esp8266/Arduino) from git - the Boards Manager version is outdated
+* Build [esp8266/Arduino](https://github.com/esp8266/Arduino) from git - the Boards Manager version is not recent enough as of July 2015
 * Edit the sketch to contain your WLAN credentials
 * Load the sketch onto your ESP-01 or other ESP8266 device
 * Optionally connect the DATA line of your WS2812b NeoPixels to pin GPIO2 (you do not really need this in order to test communication between the sketch and Hue client apps)
