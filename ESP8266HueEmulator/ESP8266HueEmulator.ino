@@ -19,7 +19,6 @@
 #include "xy.h"
 #include <math.h>
 
-
 #include "/secrets.h" // Delete this line and populate the following
 //const char* ssid = "********";
 //const char* password = "********";
@@ -38,7 +37,10 @@ unsigned int transitionTime = 800; // by default there is a transition time to t
 NeoPixelBus strip = NeoPixelBus(pixelCount, pixelPin);
 NeoPixelAnimator animator(&strip); // NeoPixel animation management object
 
-// Determines wheter a client is already authorized
+RgbColor StripRgbColors[pixelCount]; // Holds all colors of the pixels on the strip even if they are off
+bool StripLightIsOn[pixelCount]; // Holds on/off information for all the pixels
+
+// Determines whether a client is already authorized
 bool isAuthorized = false;
 
 byte mac[6]; // MAC address
@@ -94,7 +96,7 @@ void handleAllOthers() {
     aJsonObject *lights;
     aJson.addItemToObject(root, "lights", lights = aJson.createObject());
     for (int i = 1; i <= 8; i++) // FIXME: Why does this not work for more than 8?
-      addLightJson(lights, i);
+      addLightJson(lights, i, StripRgbColors[i-1]);
     aJsonObject *schedules;
     aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
     sendJson(root);
@@ -136,10 +138,19 @@ void handleAllOthers() {
     // If multiple ones are submitted at once, the following convention is used: xy beats ct beats hue/sat
     // TODO: Implement this
 
-    // Default values in case the request does not send new ones
-    int hue = 10000; // 10000 is white
-    int sat = 254;
-    int bri = 254;
+    // Get values from the saved state in case the request does not send new ones
+    HsbColor savedHsb = HsbColor(StripRgbColors[numberOfTheLight]);
+    Serial.println("Retrieved saved HSB");
+    Serial.print("H=");
+    Serial.println(savedHsb.H);
+    Serial.print("S=");
+    Serial.println(savedHsb.S);
+    Serial.print("B=");
+    Serial.println(savedHsb.B);
+
+    int hue = floor(savedHsb.H * 182.04 * 360.0);
+    int sat = floor(savedHsb.S * 254);
+    int bri = floor(savedHsb.B * 254);
 
     // Read hue, sat, bri from pixel if available
     if (aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue"))
@@ -151,6 +162,9 @@ void handleAllOthers() {
 
     RgbColor rgb;
     rgb = hsb2rgb(hue, sat, bri);
+
+    // Set values in the saved state
+    StripRgbColors[numberOfTheLight] = rgb;
 
     aJson.deleteItem(parsedRoot);
     Serial.print("I should --> ");
@@ -165,6 +179,7 @@ void handleAllOthers() {
         // progress will start at 0.0 and end at 1.0
         HslColor updatedColor = HslColor::LinearBlend(originalColor, rgb, progress);
         strip.SetPixelColor(numberOfTheLight, updatedColor);
+        StripLightIsOn[numberOfTheLight] = true; // Keep track of on/off state
       };
       animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
     }
@@ -175,6 +190,7 @@ void handleAllOthers() {
         // progress will start at 0.0 and end at 1.0
         HslColor updatedColor = HslColor::LinearBlend(originalColor, black, progress);
         strip.SetPixelColor(numberOfTheLight, updatedColor);
+        StripLightIsOn[numberOfTheLight] = false; // Keep track of on/off state
       };
       animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
     }
@@ -257,6 +273,13 @@ void setup() {
   SSDP.setManufacturer((char*)"Royal Philips Electronics");
   SSDP.setManufacturerURL((char*)"http://www.philips.com");
   Serial.println("SSDP Started");
+
+  // Initialize all pixels to white
+  for (int i = 0; i < pixelCount; i++)
+  {
+    StripRgbColors[i] = RgbColor(white);
+  }
+
 }
 
 void loop() {
@@ -357,7 +380,7 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, RgbColor rgb)
   aJsonObject *state;
   aJson.addItemToObject(light, "state", state = aJson.createObject());
   unsigned int brightness = rgb.CalculateBrightness();
-  if (brightness == 0)
+  if (StripLightIsOn[numberOfTheLight-1] == false)
     aJson.addBooleanToObject(state, "on", false);
   else
     aJson.addBooleanToObject(state, "on", true);
@@ -474,23 +497,23 @@ HsbColor rgb2hsb(RgbColor color)
 
   Serial.println("1.: H, S, B");
 
-  Serial.print("H = ");
-  Serial.println(hsb.H);
-  Serial.print("S = ");
-  Serial.println(hsb.S);
-  Serial.print("B = ");
-  Serial.println(hsb.B);
+  //  Serial.print("H = ");
+  //  Serial.println(hsb.H);
+  //  Serial.print("S = ");
+  //  Serial.println(hsb.S);
+  //  Serial.print("B = ");
+  //  Serial.println(hsb.B);
 
   Serial.println("2.: Convert to hue, sat, bri");
   hue = floor(hsb.H * 182.04 * 360.0);
   sat = floor(hsb.S * 254);
   bri = floor(hsb.B * 254);
-  Serial.print("hue = ");
-  Serial.println(hue);
-  Serial.print("sat = ");
-  Serial.println(sat);
-  Serial.print("bri = ");
-  Serial.println(bri);
+  //  Serial.print("hue = ");
+  //  Serial.println(hue);
+  //  Serial.print("sat = ");
+  //  Serial.println(sat);
+  //  Serial.print("bri = ");
+  //  Serial.println(bri);
 
   hsb.H = hue;
   hsb.S = sat;
@@ -502,35 +525,35 @@ HsbColor rgb2hsb(RgbColor color)
 RgbColor hsb2rgb(int hue, int sat, int bri)
 {
   Serial.println("Running hsb2rgb");
-  Serial.println("1.: hue, sat, bri");
-  Serial.print("hue = ");
-  Serial.println(hue);
-  Serial.print("sat = ");
-  Serial.println(sat);
-  Serial.print("bri = ");
-  Serial.println(bri);
+  //  Serial.println("1.: hue, sat, bri");
+  //  Serial.print("hue = ");
+  //  Serial.println(hue);
+  //  Serial.print("sat = ");
+  //  Serial.println(sat);
+  //  Serial.print("bri = ");
+  //  Serial.println(bri);
 
   Serial.println("2.: Convert to H, S, L");
   float H, S, B;
   H = hue / 182.04 / 360.0;
-  Serial.print("H = ");
-  Serial.println(H);
+  //  Serial.print("H = ");
+  //  Serial.println(H);
   S = sat / 254.0; // I changed this
-  Serial.print("S = ");
-  Serial.println(S);
+  //  Serial.print("S = ");
+  //  Serial.println(S);
   B = bri / 254.0; // I changed this as well
-  Serial.print("B = ");
-  Serial.println(B);
+  //  Serial.print("B = ");
+  //  Serial.println(B);
   HsbColor hsb = HsbColor(H, S, B);
 
   Serial.println("3.: Convert to RgbColor");
   RgbColor rgb = RgbColor(hsb);
-  Serial.print("R = ");
-  Serial.println(rgb.R);
-  Serial.print("G = ");
-  Serial.println(rgb.G);
-  Serial.print("B = ");
-  Serial.println(rgb.B);
+  //  Serial.print("R = ");
+  //  Serial.println(rgb.R);
+  //  Serial.print("G = ");
+  //  Serial.println(rgb.G);
+  //  Serial.print("B = ");
+  //  Serial.println(rgb.B);
 
   return rgb;
 }
