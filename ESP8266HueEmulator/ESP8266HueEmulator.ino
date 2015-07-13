@@ -362,9 +362,9 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, RgbColor rgb)
   else
     aJson.addBooleanToObject(state, "on", true);
   HsbColor hsb = rgb2hsb(rgb);
-  aJson.addNumberToObject(state, "hue", hsb.hue); // hs mode: the hue (expressed in ~deg*182.04)
-  aJson.addNumberToObject(state, "bri", hsb.bri); // brightness between 0-254 (NB 0 is not off!)
-  aJson.addNumberToObject(state, "sat", hsb.sat); // hs mode: saturation between 0-254
+  aJson.addNumberToObject(state, "hue", hsb.H); // hs mode: the hue (expressed in ~deg*182.04)
+  aJson.addNumberToObject(state, "bri", hsb.B); // brightness between 0-254 (NB 0 is not off!)
+  aJson.addNumberToObject(state, "sat", hsb.S); // hs mode: saturation between 0-254
   double numbers[2] = {0.0, 0.0};
   aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
   aJson.addNumberToObject(state, "ct", 500); // ct mode: color temp (expressed in mireds range 154-500)
@@ -466,25 +466,25 @@ void rgb2xy(int R, int G, int B)
   float y = Y / (X + Y + Z);
 }
 
-struct HsbColor rgb2hsb(RgbColor color)
+HsbColor rgb2hsb(RgbColor color)
 {
   Serial.println("Running rgb2hsb");
-  struct HsbColor hsb_instance;
+  HsbColor hsb;
   int hue, sat, bri;
 
-  Serial.println("1.: H, S, L - this seems correct");
-  HslColor hsl = HslColor(color);
-  Serial.print("H = ");
-  Serial.println(hsl.H);
-  Serial.print("S = ");
-  Serial.println(hsl.S);
-  Serial.print("L = ");
-  Serial.println(hsl.L);
+  Serial.println("1.: H, S, B");
 
-  Serial.println("2.: Convert to hue, sat, bri - I think here is where things go wrong too");
-  hue = floor(hsl.H * 182.04);
-  sat = floor(hsl.S * 254);
-  bri = floor(hsl.L * 254);
+  Serial.print("H = ");
+  Serial.println(hsb.H);
+  Serial.print("S = ");
+  Serial.println(hsb.S);
+  Serial.print("B = ");
+  Serial.println(hsb.B);
+
+  Serial.println("2.: Convert to hue, sat, bri");
+  hue = floor(hsb.H * 182.04 * 360.0);
+  sat = floor(hsb.S * 254);
+  bri = floor(hsb.B * 254);
   Serial.print("hue = ");
   Serial.println(hue);
   Serial.print("sat = ");
@@ -492,17 +492,17 @@ struct HsbColor rgb2hsb(RgbColor color)
   Serial.print("bri = ");
   Serial.println(bri);
 
-  hsb_instance.hue = hue;
-  hsb_instance.sat = sat;
-  hsb_instance.bri = bri;
+  hsb.H = hue;
+  hsb.S = sat;
+  hsb.B = bri;
 
-  return (hsb_instance);
+  return (hsb);
 }
 
 RgbColor hsb2rgb(int hue, int sat, int bri)
 {
   Serial.println("Running hsb2rgb");
-  Serial.println("1.: hue, sat, bri - I think so far it is correct");
+  Serial.println("1.: hue, sat, bri");
   Serial.print("hue = ");
   Serial.println(hue);
   Serial.print("sat = ");
@@ -510,22 +510,21 @@ RgbColor hsb2rgb(int hue, int sat, int bri)
   Serial.print("bri = ");
   Serial.println(bri);
 
-  Serial.println("2.: Convert to H, S, L - I think so far it is still correct");
-  float H, S, L;
-  H = hue / 182.04;
+  Serial.println("2.: Convert to H, S, L");
+  float H, S, B;
+  H = hue / 182.04 / 360.0;
   Serial.print("H = ");
   Serial.println(H);
   S = sat / 254.0; // I changed this
   Serial.print("S = ");
   Serial.println(S);
-  L = bri / 254.0; // I changed this as well
-  Serial.print("L = ");
-  Serial.println(L);
-  HslColor hsl = HslColor(H, S, L);
+  B = bri / 254.0; // I changed this as well
+  Serial.print("B = ");
+  Serial.println(B);
+  HsbColor hsb = HsbColor(H, S, B);
 
-  Serial.println("3.: Convert to RgbColor - I think here is where things go wrong");
-  // RgbColor rgb = hsl2rgb(hsl);
-  RgbColor rgb = RgbColor(hsl);
+  Serial.println("3.: Convert to RgbColor");
+  RgbColor rgb = RgbColor(hsb);
   Serial.print("R = ");
   Serial.println(rgb.R);
   Serial.print("G = ");
@@ -536,49 +535,4 @@ RgbColor hsb2rgb(int hue, int sat, int bri)
   return rgb;
 }
 
-// Based on http://courses.ischool.berkeley.edu/i262/f13/content/clemensmeyer/lab-3-potentiometers-hsl-rgb
-RgbColor hsl2rgb (HslColor color)
-{
-  float h = color.H;
-  float s = color.S;
-  float l = color.L;
-  float q = 0;
-  float t = 0;
-  int r;
-  int g;
-  int b;
-  if (s == 0) {
-    Serial.print("l=");
-    Serial.println(l);
-    r = g = b = (l * 2.55) + 0.5; //achromatic; I multiplied by 2.55 because otherwise I never get over 100
-    Serial.print("r=g=b=");
-    Serial.println(r);
-  } else {
-    if (l < 0.5) {
-      q = l * (1 + s);
-    } else {
-      q = l + s - l * s;
-    }
-    float p = 2 * l - q;
-    r = hue2rgb(p, q, h + 0.33) * 255;
-    g = hue2rgb(p, q, h) * 255;
-    b = hue2rgb(p, q, h - 0.33) * 255;
-  }
-  return RgbColor(r, g, b);
-}
-
-float hue2rgb (float p, float q, float t)
-{
-  if (t < 0)
-    t += 1;
-  if (t > 1)
-    t -= 1;
-  if (t < 0.17)
-    return p + (q - p) * 6 * t;
-  if (t < 0.5)
-    return q;
-  if (t < 0.67)
-    return p + (q - p) * (0.67 - t) * 6;
-  return p;
-}
 
