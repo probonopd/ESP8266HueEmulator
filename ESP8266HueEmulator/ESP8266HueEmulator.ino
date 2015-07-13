@@ -137,7 +137,7 @@ void handleAllOthers() {
     // TODO: Implement this
 
     // Default values in case the request does not send new ones
-    int hue = 1; // 10000; // 10000 is white
+    int hue = 10000; // 10000 is white
     int sat = 254;
     int bri = 254;
 
@@ -469,7 +469,7 @@ void rgb2xy(int R, int G, int B)
 HsbColor rgb2hsb(RgbColor color)
 {
   Serial.println("Running rgb2hsb");
-  HsbColor hsb;
+  HsbColor hsb = HsbColor(color);
   int hue, sat, bri;
 
   Serial.println("1.: H, S, B");
