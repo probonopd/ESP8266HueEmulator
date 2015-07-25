@@ -2,6 +2,8 @@ language: c
 sudo: false
 before_install:
   - source <(curl -SLs https://raw.githubusercontent.com/adafruit/travis-ci-arduino/master/install.sh)
+install:
+  - arduino --install-library "WiFiUdp"
 script:
   - arduino --board esp8266:esp8266:generic --save-prefs
   - arduino --verify $PWD/ESP8266HueEmulator/ESP8266HueEmulator.ino
