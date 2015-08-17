@@ -6,7 +6,8 @@ before_install:
 install:
 script:
   - ls -lh
-  - cd ESP8266HueEmulator
+  - mkdir -p ESP8266HueEmulator/libraries
+  - cd ESP8266HueEmulator/libraries
   - git clone https://github.com/Makuna/NeoPixelBus.git
   - cd -
   - build_platform esp8266
