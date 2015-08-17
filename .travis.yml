@@ -12,5 +12,5 @@ install:
   - cd -
 script:
   - sed -i -e 's|#include "/secrets.h"|//#include "/secrets.h"|g' ESP8266HueEmulator/ESP8266HueEmulator.ino
-  - sed -i -e 's|//const char*|const char*|g' ESP8266HueEmulator/ESP8266HueEmulator.ino
+  - sed -i -e 's|//const char|const char|g' ESP8266HueEmulator/ESP8266HueEmulator.ino
   - build_platform esp8266
