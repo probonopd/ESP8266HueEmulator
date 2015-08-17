@@ -12,7 +12,7 @@
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
-#include <WiFiUDP.h>
+#include <WiFiUdp.h>
 #include <ESP8266SSDP.h>
 #include <NeoPixelBus.h> // NeoPixelAnimator branch
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
