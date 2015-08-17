@@ -6,8 +6,8 @@ before_install:
 install:
 script:
   - ls -lh
-  - mkdir -p $HOME/sketchbook/libraries
-  - cd $HOME/sketchbook/libraries
+  - mkdir -p $HOME/arduino_ide/libraries/
+  - cd $HOME/arduino_ide/libraries/
   - git clone https://github.com/Makuna/NeoPixelBus.git
   - cd -
   - build_platform esp8266
