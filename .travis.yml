@@ -6,7 +6,7 @@ before_install:
 install:
   - mkdir -p $HOME/arduino_ide/libraries/
   - cd $HOME/arduino_ide/libraries/
-  - git clone https://github.com/Makuna/NeoPixelBus.git --branch NeoPixelAnimator --single-branch
+  - git clone https://github.com/Makuna/NeoPixelBus.git
   - git clone https://github.com/interactive-matter/aJson.git
   - sed -i -e 's|#define PRINT_BUFFER_LEN 256|#define PRINT_BUFFER_LEN 4096|g'  aJson/aJSON.h
   - cd -
