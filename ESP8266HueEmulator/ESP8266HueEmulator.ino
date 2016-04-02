@@ -34,8 +34,8 @@ RgbColor white = RgbColor(colorSaturation);
 RgbColor black = RgbColor(0);
 unsigned int transitionTime = 800; // by default there is a transition time to the new state of 400 milliseconds
 
-NeoPixelBus strip = NeoPixelBus(pixelCount, pixelPin);
-NeoPixelAnimator animator(&strip); // NeoPixel animation management object
+NeoPixelBus<NeoRgbFeature, Neo800KbpsMethod> strip(pixelCount, pixelPin);
+NeoPixelAnimator animator(pixelCount); // NeoPixel animation management object
 
 RgbColor StripRgbColors[pixelCount]; // Holds all colors of the pixels on the strip even if they are off
 bool StripLightIsOn[pixelCount]; // Holds on/off information for all the pixels
@@ -174,10 +174,10 @@ void handleAllOthers() {
     HslColor originalColor = strip.GetPixelColor(numberOfTheLight); // FIXME: In lambda function: error: 'originalColor' was not declared in this scope - potential reason for crashes?
     if (onValue == true)
     {
-      AnimUpdateCallback animUpdate = [ = ](float progress)
+      AnimUpdateCallback animUpdate = [ = ](const AnimationParam& param)
       {
         // progress will start at 0.0 and end at 1.0
-        HslColor updatedColor = HslColor::LinearBlend(originalColor, rgb, progress);
+        HslColor updatedColor = HslColor::LinearBlend(originalColor, rgb, param.progress);
         strip.SetPixelColor(numberOfTheLight, updatedColor);
         StripLightIsOn[numberOfTheLight] = true; // Keep track of on/off state
       };
@@ -185,10 +185,10 @@ void handleAllOthers() {
     }
     else
     {
-      AnimUpdateCallback animUpdate = [ = ](float progress)
+      AnimUpdateCallback animUpdate = [ = ](const AnimationParam& param)
       {
         // progress will start at 0.0 and end at 1.0
-        HslColor updatedColor = HslColor::LinearBlend(originalColor, black, progress);
+        HslColor updatedColor = HslColor::LinearBlend(originalColor, black, param.progress);
         strip.SetPixelColor(numberOfTheLight, updatedColor);
         StripLightIsOn[numberOfTheLight] = false; // Keep track of on/off state
       };
