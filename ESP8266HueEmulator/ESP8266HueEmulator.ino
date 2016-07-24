@@ -289,11 +289,12 @@ void setup() {
   SSDP.setName((char*)"Philips hue clone");
   SSDP.setSerialNumber((char*)"001788102201");
   SSDP.setURL((char*)"index.html");
-  SSDP.setModelName((char*)"Philips hue bridge 2012");
-  SSDP.setModelNumber((char*)"929000226503");
+  SSDP.setModelName((char*)"IpBridge");
+  SSDP.setModelNumber((char*)"0.1");
   SSDP.setModelURL((char*)"http://www.meethue.com");
   SSDP.setManufacturer((char*)"Royal Philips Electronics");
   SSDP.setManufacturerURL((char*)"http://www.philips.com");
+  SSDP.setDeviceType((char*)"upnp:rootdevice");
   Serial.println("SSDP Started");
 
   // Initialize all pixels to white
