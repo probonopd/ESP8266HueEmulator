@@ -132,68 +132,89 @@ void handleAllOthers() {
     Serial.print("Number of the light --> ");
     Serial.println(numberOfTheLight);
     aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
-    aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
-    bool onValue = onState->valuebool;
-
-    // The client app uses xy, ct, and hue, sat interchangeably.
-    // If multiple ones are submitted at once, the following convention is used: xy beats ct beats hue/sat
-    // TODO: Implement this
-
-    // Get values from the saved state in case the request does not send new ones
-    HsbColor savedHsb = HsbColor(StripRgbColors[numberOfTheLight]);
-    Serial.println("Retrieved saved HSB");
-    Serial.print("H=");
-    Serial.println(savedHsb.H);
-    Serial.print("S=");
-    Serial.println(savedHsb.S);
-    Serial.print("B=");
-    Serial.println(savedHsb.B);
-
-    int hue = floor(savedHsb.H * 182.04 * 360.0);
-    int sat = floor(savedHsb.S * 254);
-    int bri = floor(savedHsb.B * 254);
-
-    // Read hue, sat, bri from pixel if available
-    if (aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue"))
-      hue = hueState->valueint;
-    if (aJsonObject* satState = aJson.getObjectItem(parsedRoot, "sat"))
-      sat = satState->valueint;
-    if (aJsonObject* briState = aJson.getObjectItem(parsedRoot, "bri"))
-      bri = briState->valueint;
-
     RgbColor rgb;
-    rgb = hsb2rgb(hue, sat, bri);
+    // get the current state
+    rgb = StripRgbColors[numberOfTheLight];
+    if (parsedRoot) {
+      // The client app uses xy, ct, and hue, sat interchangeably.
+      // If multiple ones are submitted at once, the following convention is used: xy beats ct beats hue/sat
+      // TODO: Implement this
 
-    // Set values in the saved state
-    StripRgbColors[numberOfTheLight] = rgb;
+      // Get values from the saved state in case the request does not send new ones
+      HsbColor savedHsb = HsbColor(StripRgbColors[numberOfTheLight]);
+      Serial.println("Retrieved saved HSB");
+      Serial.print("H=");
+      Serial.println(savedHsb.H);
+      Serial.print("S=");
+      Serial.println(savedHsb.S);
+      Serial.print("B=");
+      Serial.println(savedHsb.B);
 
-    aJson.deleteItem(parsedRoot);
-    Serial.print("I should --> ");
-    Serial.println(onValue);
+      aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
+      bool onValue = false;
+      if (onState) {
+        onValue = onState->valuebool;
+      }
 
-    // define the effect to apply, in this case linear blend
-    HslColor originalColor = strip.GetPixelColor(numberOfTheLight); // FIXME: In lambda function: error: 'originalColor' was not declared in this scope - potential reason for crashes?
-    if (onValue == true)
-    {
-      AnimUpdateCallback animUpdate = [ = ](const AnimationParam& param)
+      // Read hue, sat, bri from pixel if available
+      aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue");
+      aJsonObject* satState = aJson.getObjectItem(parsedRoot, "sat");
+      aJsonObject* briState = aJson.getObjectItem(parsedRoot, "bri");
+      if (hueState || satState || briState) {
+        int hue, sat, bri;
+        if (hueState) {
+          hue = hueState->valueint;
+        } else {
+          hue = floor(savedHsb.H * 182.04 * 360.0);
+        }
+        if (satState) {
+          sat = satState->valueint;
+        } else {
+          sat = floor(savedHsb.S * 254);
+        }
+        if (briState) {
+          bri = briState->valueint;
+        } else {
+          bri = floor(savedHsb.B * 254);
+        }
+
+        rgb = hsb2rgb(hue, sat, bri);
+        // Set values in the saved state
+        StripRgbColors[numberOfTheLight] = rgb;
+
+        if (!onState && bri) {
+          onValue = true;
+        }
+      }
+
+      aJson.deleteItem(parsedRoot);
+      Serial.print("I should --> ");
+      Serial.println(onValue);
+
+      // define the effect to apply, in this case linear blend
+      HslColor originalColor = strip.GetPixelColor(numberOfTheLight); // FIXME: In lambda function: error: 'originalColor' was not declared in this scope - potential reason for crashes?
+      if (onValue == true)
       {
-        // progress will start at 0.0 and end at 1.0
-        HslColor updatedColor = HslColor::LinearBlend(originalColor, rgb, param.progress);
-        strip.SetPixelColor(numberOfTheLight, updatedColor);
-        StripLightIsOn[numberOfTheLight] = true; // Keep track of on/off state
-      };
-      animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
-    }
-    else
-    {
-      AnimUpdateCallback animUpdate = [ = ](const AnimationParam& param)
+        AnimUpdateCallback animUpdate = [ = ](const AnimationParam & param)
+        {
+          // progress will start at 0.0 and end at 1.0
+          HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, rgb, param.progress);
+          strip.SetPixelColor(numberOfTheLight, updatedColor);
+          StripLightIsOn[numberOfTheLight] = true; // Keep track of on/off state
+        };
+        animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
+      }
+      else
       {
-        // progress will start at 0.0 and end at 1.0
-        HslColor updatedColor = HslColor::LinearBlend(originalColor, black, param.progress);
-        strip.SetPixelColor(numberOfTheLight, updatedColor);
-        StripLightIsOn[numberOfTheLight] = false; // Keep track of on/off state
-      };
-      animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
+        AnimUpdateCallback animUpdate = [ = ](const AnimationParam & param)
+        {
+          // progress will start at 0.0 and end at 1.0
+          HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, black, param.progress);
+          strip.SetPixelColor(numberOfTheLight, updatedColor);
+          StripLightIsOn[numberOfTheLight] = false; // Keep track of on/off state
+        };
+        animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
+      }
     }
 
     aJsonObject *root;
