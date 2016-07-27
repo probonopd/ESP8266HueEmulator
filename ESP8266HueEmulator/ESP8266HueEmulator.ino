@@ -25,7 +25,7 @@
 //const char* password = "********";
 
 // Settings for the NeoPixels
-#define pixelCount 30 // Strip has 30 NeoPixels
+#define pixelCount 6 // Max number of exposed lights is directly related to aJSON PRINT_BUFFER_LEN, 14 for 4096
 #define pixelPin 2 // Strip is attached to GPIO2 on ESP-01
 #define colorSaturation 254
 RgbColor red = RgbColor(colorSaturation, 0, 0);
