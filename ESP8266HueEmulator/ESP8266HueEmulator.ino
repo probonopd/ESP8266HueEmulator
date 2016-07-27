@@ -129,6 +129,9 @@ void handleAllOthers() {
     }
     Serial.println(HTTP.arg("plain"));
     int numberOfTheLight = atoi(subStr(requestedUri.c_str(), "/", 4)) - 1; // The number of the light to be switched; they start with 1
+    if (numberOfTheLight == -1) {
+      numberOfTheLight = atoi(subStr(requestedUri.c_str(), "/", 3)) - 1;
+    }
     Serial.print("Number of the light --> ");
     Serial.println(numberOfTheLight);
     aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
