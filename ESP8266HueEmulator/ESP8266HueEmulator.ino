@@ -96,7 +96,7 @@ void handleAllOthers() {
     addConfigJson(config);
     aJsonObject *lights;
     aJson.addItemToObject(root, "lights", lights = aJson.createObject());
-    for (int i = 1; i <= 8; i++) // FIXME: Why does this not work for more than 8?
+    for (int i = 1; i <= pixelCount; i++)
       addLightJson(lights, i, StripRgbColors[i-1]);
     aJsonObject *schedules;
     aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
