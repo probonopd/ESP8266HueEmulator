@@ -35,7 +35,7 @@ RgbColor white = RgbColor(colorSaturation);
 RgbColor black = RgbColor(0);
 unsigned int transitionTime = 800; // by default there is a transition time to the new state of 400 milliseconds
 
-NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(pixelCount, pixelPin);
+NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(pixelCount, pixelPin);
 NeoPixelAnimator animator(pixelCount, NEO_DECISECONDS); // NeoPixel animation management object
 
 RgbColor StripRgbColors[pixelCount]; // Holds all colors of the pixels on the strip even if they are off
