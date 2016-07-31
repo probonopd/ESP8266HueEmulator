@@ -100,7 +100,6 @@ void handleAllOthers() {
     aJsonObject *schedules;
     aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
     sendJson(root);
-
   }
 
   else if (requestedUri.endsWith("/api"))
@@ -422,13 +421,6 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, RgbColor rgb)
   aJson.addBooleanToObject(state, "reachable", true); // lamp can be seen by the hub
 }
 
-
-void addLightJson(aJsonObject* root, int numberOfTheLight)
-{
-  RgbColor rgb = strip.GetPixelColor(numberOfTheLight - 1);
-  addLightJson(root, numberOfTheLight, rgb);
-}
-
 // ==============================================================================================================
 // Color Conversion
 // ==============================================================================================================
@@ -459,33 +451,7 @@ struct xy getRGBtoXY(RgbColor color)
   //-Green: 0.2151, 0.7106
   //-Blue: 0.138, 0.08
 
-  float normalizedToOneRed, normalizedToOneGreen, normalizedToOneBlue;
-
-  normalizedToOneRed = (color.R / 255);
-  normalizedToOneGreen = (color.G / 255);
-  normalizedToOneBlue = (color.B / 255);
-
   float red, green, blue;
-  /*
-     // Make red more vivid
-     if (normalizedToOneRed > 0.04045)
-       red = (float) pow((normalizedToOneRed + 0.055) / (1.0 + 0.055), 2.4);
-     else
-       red = (float) (normalizedToOneRed / 12.92);
-
-     // Make green more vivid
-     if (normalizedToOneGreen > 0.04045)
-       green = (float) pow((normalizedToOneGreen + 0.055) / (1.0 + 0.055), 2.4);
-     else
-       green = (float) (normalizedToOneGreen / 12.92);
-
-     // Make blue more vivid
-     if (normalizedToOneBlue > 0.04045)
-       blue = (float) pow((normalizedToOneBlue + 0.055) / (1.0 + 0.055), 2.4);
-     else
-       blue = (float) (normalizedToOneBlue / 12.92);
-  */
-
   float X = (float) (red * 0.649926 + green * 0.103455 + blue * 0.197109);
   float Y = (float) (red * 0.234327 + green * 0.743075 + blue * 0.022598);
   float Z = (float) (red * 0.0000000 + green * 0.053077 + blue * 1.035763);
