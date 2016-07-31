@@ -30,7 +30,6 @@
 #define colorSaturation 254
 RgbColor red = RgbColor(colorSaturation, 0, 0);
 RgbColor green = RgbColor(0, colorSaturation, 0);
-RgbColor blue = RgbColor(0, 0, colorSaturation);
 RgbColor white = RgbColor(colorSaturation);
 RgbColor black = RgbColor(0);
 unsigned int transitionTime = 800; // by default there is a transition time to the new state of 400 milliseconds
