@@ -160,17 +160,28 @@ RgbColor getMirektoRGB(int mirek) {
   return RgbColor(r, g, b);
 }
 
-HueLightInfo parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot) {
-  HueLightInfo newInfo;
+void sendError(int type, String path, String description) {
+  aJsonObject *root = aJson.createArray();
+  aJsonObject *errorContainer = aJson.createObject();
+  aJsonObject *errorObject = aJson.createObject();
+  aJson.addItemToObject(errorObject, "type", aJson.createItem(type));
+  aJson.addStringToObject(errorObject, "address", path.c_str());
+  aJson.addStringToObject(errorObject, "description", description.c_str());
+  aJson.addItemToObject(errorContainer, "error", errorObject);
+  aJson.addItemToArray(root, errorContainer);
+  sendJson(root);
+}
+
+bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLightInfo *newInfo) {
   aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
   if (onState) {
-    newInfo.on = onState->valuebool;
+    newInfo->on = onState->valuebool;
   }
 
   // pull brightness
   aJsonObject* briState = aJson.getObjectItem(parsedRoot, "bri");
   if (briState) {
-    newInfo.brightness = briState->valueint;
+    newInfo->brightness = briState->valueint;
   }
 
   // pull effect
@@ -178,9 +189,9 @@ HueLightInfo parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot
   if (effectState) {
     const char *effect = effectState->valuestring;
     if (!strcmp(effect, "colorloop")) {
-      newInfo.effect = EFFECT_COLORLOOP;
+      newInfo->effect = EFFECT_COLORLOOP;
     } else {
-      newInfo.effect = EFFECT_NONE;
+      newInfo->effect = EFFECT_NONE;
     }
   }
   // pull alert
@@ -188,11 +199,11 @@ HueLightInfo parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot
   if (alertState) {
     const char *alert = alertState->valuestring;
     if (!strcmp(alert, "select")) {
-      newInfo.alert = ALERT_SELECT;
+      newInfo->alert = ALERT_SELECT;
     } else if (!strcmp(alert, "lselect")) {
-      newInfo.alert = ALERT_LSELECT;
+      newInfo->alert = ALERT_LSELECT;
     } else {
-      newInfo.alert = ALERT_NONE;
+      newInfo->alert = ALERT_NONE;
     }
   }
 
@@ -204,25 +215,27 @@ HueLightInfo parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot
     aJsonObject* elem0 = aJson.getArrayItem(xyState, 0);
     aJsonObject* elem1 = aJson.getArrayItem(xyState, 1);
     if (!elem0 || !elem1) {
-      // XXX NOPE
+      sendError(5, "/api/api/lights/?/state", "xy color coordinates incomplete");
+      return false;
     }
-    HsbColor hsb = getXYtoRGB(elem0->valuefloat, elem1->valuefloat, newInfo.brightness);
-    newInfo.hue = getHue(hsb);
-    newInfo.saturation = getSaturation(hsb);
+    HsbColor hsb = getXYtoRGB(elem0->valuefloat, elem1->valuefloat, newInfo->brightness);
+    newInfo->hue = getHue(hsb);
+    newInfo->saturation = getSaturation(hsb);
   } else if (ctState) {
     int mirek = ctState->valueint;
     if (mirek > 500 || mirek < 153) {
-      // XXX error
+      sendError(7, "/api/api/lights/?/state", "Invalid vaule for color temperature");
+      return false;
     }
 
     HsbColor hsb = getMirektoRGB(mirek);
-    newInfo.hue = getHue(hsb);
-    newInfo.saturation = getSaturation(hsb);
+    newInfo->hue = getHue(hsb);
+    newInfo->saturation = getSaturation(hsb);
   } else if (hueState || satState) {
-    if (hueState) newInfo.hue = hueState->valueint;
-    if (satState) newInfo.saturation = satState->valueint;
+    if (hueState) newInfo->hue = hueState->valueint;
+    if (satState) newInfo->saturation = satState->valueint;
   }
-  return newInfo;
+  return true;
 }
 
 void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler) {
@@ -357,11 +370,18 @@ void handleAllOthers() {
     aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
     LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
     if (!handler) {
-      // XXX throw an error?
+      sendError(3, requestedUri, "Requested light not available");
+      Serial.println(millis());
+      return;
     }
     HueLightInfo currentInfo = handler->getInfo(numberOfTheLight);
     if (parsedRoot) {
-      HueLightInfo newInfo = parseHueLightInfo(currentInfo, parsedRoot);
+      HueLightInfo newInfo;
+      if (!parseHueLightInfo(currentInfo, parsedRoot, &newInfo)) {
+        aJson.deleteItem(parsedRoot);
+        Serial.println(millis());
+        return;
+      }
       aJson.deleteItem(parsedRoot);
       handler->handleQuery(numberOfTheLight, newInfo);
     }
