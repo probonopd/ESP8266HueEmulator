@@ -17,6 +17,7 @@
 #include <NeoPixelBus.h>
 #include <NeoPixelAnimator.h> // instead of NeoPixelAnimator branch
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
+#include "LightHandler.h"
 #include <math.h>
 
 #include "/secrets.h" // Delete this line and populate the following
@@ -26,7 +27,6 @@
 // Settings for the NeoPixels
 #define pixelCount 6 // Max number of exposed lights is directly related to aJSON PRINT_BUFFER_LEN, 14 for 4096
 #define pixelPin 2 // Strip is attached to GPIO2 on ESP-01
-#define colorSaturation 254
 RgbColor red = RgbColor(colorSaturation, 0, 0);
 RgbColor green = RgbColor(0, colorSaturation, 0);
 RgbColor white = RgbColor(colorSaturation);
@@ -36,8 +36,39 @@ unsigned int transitionTime = 800; // by default there is a transition time to t
 NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(pixelCount, pixelPin);
 NeoPixelAnimator animator(pixelCount, NEO_MILLISECONDS); // NeoPixel animation management object
 
-RgbColor StripRgbColors[pixelCount]; // Holds all colors of the pixels on the strip even if they are off
-bool StripLightIsOn[pixelCount]; // Holds on/off information for all the pixels
+class PixelHandler : public LightHandler {
+  private:
+    HueLightInfo _info;
+  public:
+    void handleQuery(int lightNumber, HueLightInfo newInfo) {
+      // define the effect to apply, in this case linear blend
+      HslColor newColor = HslColor(getHsb(newInfo.hue, newInfo.saturation, newInfo.brightness));
+      HslColor originalColor = strip.GetPixelColor(lightNumber);
+      _info = newInfo;
+      if (newInfo.on)
+      {
+        AnimUpdateCallback animUpdate = [ = ](const AnimationParam & param)
+        {
+          // progress will start at 0.0 and end at 1.0
+          HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, newColor, param.progress);
+          strip.SetPixelColor(lightNumber, updatedColor);
+        };
+        animator.StartAnimation(lightNumber, transitionTime, animUpdate);
+      }
+      else
+      {
+        AnimUpdateCallback animUpdate = [ = ](const AnimationParam & param)
+        {
+          // progress will start at 0.0 and end at 1.0
+          HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, black, param.progress);
+          strip.SetPixelColor(lightNumber, updatedColor);
+        };
+        animator.StartAnimation(lightNumber, transitionTime, animUpdate);
+      }
+    }
+
+    HueLightInfo getInfo(int lightNumber) { return _info; }
+};
 
 // Determines whether a client is already authorized
 bool isAuthorized = false;
@@ -94,8 +125,8 @@ void handleAllOthers() {
     addConfigJson(config);
     aJsonObject *lights;
     aJson.addItemToObject(root, "lights", lights = aJson.createObject());
-    for (int i = 1; i <= pixelCount; i++)
-      addLightJson(lights, i, StripRgbColors[i-1]);
+    for (int i = 0; i < MAX_LIGHT_HANDLERS; i++)
+      addLightJson(lights, i, getLightHandler(i));
     aJsonObject *schedules;
     aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
     sendJson(root);
@@ -132,94 +163,20 @@ void handleAllOthers() {
     Serial.print("Number of the light --> ");
     Serial.println(numberOfTheLight);
     aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
-    RgbColor rgb;
-    // get the current state
-    rgb = StripRgbColors[numberOfTheLight];
+    LightHandler *handler = getLightHandler(numberOfTheLight);
+    if (!handler) {
+      // XXX throw an error?
+    }
+    HueLightInfo currentInfo = handler->getInfo(numberOfTheLight);
     if (parsedRoot) {
-      // The client app uses xy, ct, and hue, sat interchangeably.
-      // If multiple ones are submitted at once, the following convention is used: xy beats ct beats hue/sat
-      // TODO: Implement this
-
-      // Get values from the saved state in case the request does not send new ones
-      HsbColor savedHsb = HsbColor(StripRgbColors[numberOfTheLight]);
-      Serial.println("Retrieved saved HSB");
-      Serial.print("H=");
-      Serial.println(savedHsb.H);
-      Serial.print("S=");
-      Serial.println(savedHsb.S);
-      Serial.print("B=");
-      Serial.println(savedHsb.B);
-
-      aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
-      bool onValue = false;
-      if (onState) {
-        onValue = onState->valuebool;
-      }
-
-      // Read hue, sat, bri from pixel if available
-      aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue");
-      aJsonObject* satState = aJson.getObjectItem(parsedRoot, "sat");
-      aJsonObject* briState = aJson.getObjectItem(parsedRoot, "bri");
-      if (hueState || satState || briState) {
-        int hue, sat, bri;
-        if (hueState) {
-          hue = hueState->valueint;
-        } else {
-          hue = floor(savedHsb.H * 182.04 * 360.0);
-        }
-        if (satState) {
-          sat = satState->valueint;
-        } else {
-          sat = floor(savedHsb.S * 254);
-        }
-        if (briState) {
-          bri = briState->valueint;
-        } else {
-          bri = floor(savedHsb.B * 254);
-        }
-
-        rgb = hsb2rgb(hue, sat, bri);
-        // Set values in the saved state
-        StripRgbColors[numberOfTheLight] = rgb;
-
-        if (!onState && bri) {
-          onValue = true;
-        }
-      }
-
+      HueLightInfo newInfo = parseHueLightInfo(currentInfo, parsedRoot);
       aJson.deleteItem(parsedRoot);
-      Serial.print("I should --> ");
-      Serial.println(onValue);
-
-      // define the effect to apply, in this case linear blend
-      HslColor originalColor = strip.GetPixelColor(numberOfTheLight); // FIXME: In lambda function: error: 'originalColor' was not declared in this scope - potential reason for crashes?
-      if (onValue == true)
-      {
-        AnimUpdateCallback animUpdate = [ = ](const AnimationParam & param)
-        {
-          // progress will start at 0.0 and end at 1.0
-          HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, rgb, param.progress);
-          strip.SetPixelColor(numberOfTheLight, updatedColor);
-          StripLightIsOn[numberOfTheLight] = true; // Keep track of on/off state
-        };
-        animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
-      }
-      else
-      {
-        AnimUpdateCallback animUpdate = [ = ](const AnimationParam & param)
-        {
-          // progress will start at 0.0 and end at 1.0
-          HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, black, param.progress);
-          strip.SetPixelColor(numberOfTheLight, updatedColor);
-          StripLightIsOn[numberOfTheLight] = false; // Keep track of on/off state
-        };
-        animator.StartAnimation(numberOfTheLight, transitionTime, animUpdate);
-      }
+      handler->handleQuery(numberOfTheLight, newInfo);
     }
 
     aJsonObject *root;
     root = aJson.createObject();
-    addLightJson(root, numberOfTheLight + 1, rgb); // FIXME: This does not give the new color while an animation is still running
+    addLightJson(root, numberOfTheLight, handler);
     sendJson(root);
   }
 
@@ -297,12 +254,10 @@ void setup() {
   SSDP.setDeviceType((char*)"upnp:rootdevice");
   Serial.println("SSDP Started");
 
-  // Initialize all pixels to white
-  for (int i = 0; i < pixelCount; i++)
-  {
-    StripRgbColors[i] = RgbColor(white);
+  // setup pixels as lights
+  for (int i = 0; i < MAX_LIGHT_HANDLERS && i < pixelCount; i++) {
+    setLightHandler(i, new PixelHandler());
   }
-
 }
 
 void loop() {
@@ -392,25 +347,22 @@ void addConfigJson(aJsonObject *root)
   aJson.addStringToObject(swupdate, "url", "");
 }
 
-void addLightJson(aJsonObject* root, int numberOfTheLight, RgbColor rgb)
+void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler)
 {
-  String lightName = "" + (String) numberOfTheLight;
+  if (!lightHandler) return;
+  String lightName = "" + (String) (numberOfTheLight + 1);
   aJsonObject *light;
   aJson.addItemToObject(root, lightName.c_str(), light = aJson.createObject());
   aJson.addStringToObject(light, "type", "Extended color light"); // type of lamp (all "Extended colour light" for now)
-  aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) numberOfTheLight).c_str()); // // the name as set through the web UI or app
+  aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) (numberOfTheLight + 1)).c_str()); // // the name as set through the web UI or app
   aJson.addStringToObject(light, "modelid", "LST001"); // the model number
   aJsonObject *state;
   aJson.addItemToObject(light, "state", state = aJson.createObject());
-  unsigned int brightness = rgb.CalculateBrightness();
-  if (StripLightIsOn[numberOfTheLight-1] == false)
-    aJson.addBooleanToObject(state, "on", false);
-  else
-    aJson.addBooleanToObject(state, "on", true);
-  HsbColor hsb = rgb2hsb(rgb);
-  aJson.addNumberToObject(state, "hue", hsb.H); // hs mode: the hue (expressed in ~deg*182.04)
-  aJson.addNumberToObject(state, "bri", hsb.B); // brightness between 0-254 (NB 0 is not off!)
-  aJson.addNumberToObject(state, "sat", hsb.S); // hs mode: saturation between 0-254
+  HueLightInfo info = lightHandler->getInfo(numberOfTheLight);
+  aJson.addBooleanToObject(state, "on", info.on);
+  aJson.addNumberToObject(state, "hue", info.hue); // hs mode: the hue (expressed in ~deg*182.04)
+  aJson.addNumberToObject(state, "bri", info.brightness); // brightness between 0-254 (NB 0 is not off!)
+  aJson.addNumberToObject(state, "sat", info.saturation); // hs mode: saturation between 0-254
   double numbers[2] = {0.0, 0.0};
   aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
   aJson.addNumberToObject(state, "ct", 500); // ct mode: color temp (expressed in mireds range 154-500)
@@ -420,71 +372,10 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, RgbColor rgb)
   aJson.addBooleanToObject(state, "reachable", true); // lamp can be seen by the hub
 }
 
-// ==============================================================================================================
-// Color Conversion
-// ==============================================================================================================
-// TODO: Consider switching to something along the lines of
-// https://github.com/patdie421/mea-edomus/blob/master/src/philipshue_color.c
-// and/ or https://github.com/kayno/arduinolifx/blob/master/color.h
-// for color coversions instead
-// ==============================================================================================================
-
-// Based on http://stackoverflow.com/questions/22564187/rgb-to-philips-hue-hsb
-// The code is based on this brilliant note: https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/commit/f41091cf671e13fe8c32fcced12604cd31cceaf3
-
-RgbColor getXYtoRGB(float x, float y, int brightness) {
-  float bright_y = ((float)brightness) / y;
-  float X = x * bright_y;
-  float Z = (1 - x - y) * bright_y;
-
-  // convert to RGB (0.0-1.0) color space
-  float R = X * 1.4628067 - brightness * 0.1840623 - Z * 0.2743606;
-  float G = -X * 0.5217933 + brightness * 1.4472381 + Z * 0.0677227;
-  float B = X * 0.0349342 - brightness * 0.0968930 + Z * 1.2884099;
-
-  // apply inverse 2.2 gamma
-  float inv_gamma = 1.0 / 2.4;
-  float linear_delta = 0.055;
-  float linear_interval = 1 + linear_delta;
-  float r = R <= 0.0031308 ? 12.92 * R : (linear_interval) * pow(r, inv_gamma) - linear_delta;
-  float g = G <= 0.0031308 ? 12.92 * G : (linear_interval) * pow(g, inv_gamma) - linear_delta;
-  float b = B <= 0.0031308 ? 12.92 * B : (linear_interval) * pow(b, inv_gamma) - linear_delta;
-
-  return RgbColor(r * colorSaturation,
-                  g * colorSaturation,
-                  b * colorSaturation);
-}
-
 HsbColor getHsb(int hue, int sat, int bri) {
   float H, S, B;
   H = hue / 182.04 / 360.0;
   S = sat / colorSaturation;
   B = bri / colorSaturation;
   return HsbColor(H, S, B);
-}
-
-int getHue(HsbColor hsb) {
-  return hsb.H * 360 * 182.04;
-}
-
-int getSaturation(HsbColor hsb) {
-  return hsb.S * colorSaturation;
-}
-
-RgbColor getMirektoRGB(int mirek) {
-  int hectemp = 10000/mirek;
-  int r, g, b;
-  if (hectemp <= 66) {
-    r = colorSaturation;
-    g = 99.4708025861 * log(hectemp) - 161.1195681661;
-    b = hectemp <= 19 ? 0 : (138.5177312231 * log(hectemp - 10) - 305.0447927307);
-  } else {
-    r = 329.698727446 * pow(hectemp - 60, -0.1332047592);
-    g = 288.1221695283 * pow(hectemp - 60, -0.0755148492);
-    b = colorSaturation;
-  }
-  r = r > colorSaturation ? colorSaturation : r;
-  g = g > colorSaturation ? colorSaturation : g;
-  b = b > colorSaturation ? colorSaturation : b;
-  return RgbColor(r, g, b);
 }
