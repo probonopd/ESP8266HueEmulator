@@ -33,6 +33,7 @@ LightHandler *getLightHandler(int numberOfTheLight);
 bool setLightHandler(int index, LightHandler *handler);
 class aJsonObject;
 HueLightInfo parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot);
+void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler);
 
 #define MAX_LIGHT_HANDLERS 14
 #define colorSaturation 254

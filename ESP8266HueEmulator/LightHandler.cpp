@@ -148,3 +148,27 @@ HueLightInfo parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot
   }
   return newInfo;
 }
+
+void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler) {
+  if (!lightHandler) return;
+  String lightName = "" + (String) (numberOfTheLight + 1);
+  aJsonObject *light;
+  aJson.addItemToObject(root, lightName.c_str(), light = aJson.createObject());
+  aJson.addStringToObject(light, "type", "Extended color light"); // type of lamp (all "Extended colour light" for now)
+  aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) (numberOfTheLight + 1)).c_str()); // // the name as set through the web UI or app
+  aJson.addStringToObject(light, "modelid", "LST001"); // the model number
+  aJsonObject *state;
+  aJson.addItemToObject(light, "state", state = aJson.createObject());
+  HueLightInfo info = lightHandler->getInfo(numberOfTheLight);
+  aJson.addBooleanToObject(state, "on", info.on);
+  aJson.addNumberToObject(state, "hue", info.hue); // hs mode: the hue (expressed in ~deg*182.04)
+  aJson.addNumberToObject(state, "bri", info.brightness); // brightness between 0-254 (NB 0 is not off!)
+  aJson.addNumberToObject(state, "sat", info.saturation); // hs mode: saturation between 0-254
+  double numbers[2] = {0.0, 0.0};
+  aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
+  aJson.addNumberToObject(state, "ct", 500); // ct mode: color temp (expressed in mireds range 154-500)
+  aJson.addStringToObject(state, "alert", "none"); // 'select' flash the lamp once, 'lselect' repeat flash for 30s
+  aJson.addStringToObject(state, "effect", "none"); // 'colorloop' makes Hue cycle through colors
+  aJson.addStringToObject(state, "colormode", "hs"); // the current color mode
+  aJson.addBooleanToObject(state, "reachable", true); // lamp can be seen by the hub
+}

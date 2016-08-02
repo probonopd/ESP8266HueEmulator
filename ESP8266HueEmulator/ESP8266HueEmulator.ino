@@ -261,12 +261,6 @@ void setup() {
 }
 
 void loop() {
-  // FIXME: This seems to block everything while a request is being processed which takes about 2 seconds
-  // Can we run this in a separate thread, in "the background"?
-  // Makuna has a task library that "helps" manage non-preemptive tasks, but it would require
-  // that HTTP.handleClient() and/or SSDP.update() be modified to do less in a loop at one time.
-  // We might bring this question up on the esp8266/arduino chat to see if there is support
-  // to thread off the networking stuff; but in general, we don't have a multitasking core.
   HTTP.handleClient();
 
   static unsigned long update_strip_time = 0;  //  keeps track of pixel refresh rate... limits updates to 33 Hz
@@ -329,47 +323,17 @@ void addConfigJson(aJsonObject *root)
   aJson.addStringToObject(root, "ipaddress", ipString.c_str());
   aJson.addStringToObject(root, "netmask", netmaskString.c_str());
   aJson.addStringToObject(root, "gateway", gatewayString.c_str());
-  // aJson.addStringToObject(root, "proxyaddress", ""); // Seems not required by client app
-  // aJson.addNumberToObject(root, "proxyport", 0); // Seems not required by client app
-  // aJson.addStringToObject(root, "UTC", "2012-10-29T12:05:00"); // Seems not required by client app
   aJsonObject *whitelist;
   aJson.addItemToObject(root, "whitelist", whitelist = aJson.createObject());
   aJsonObject *whitelistFirstEntry;
   aJson.addItemToObject(whitelist, client.c_str(), whitelistFirstEntry = aJson.createObject());
   aJson.addStringToObject(whitelistFirstEntry, "name", "clientname#devicename");
-  // aJson.addStringToObject(whitelistFirstEntry, "last use date", "2015-07-05T16:48:18"); // Seems not required by client app
-  // aJson.addStringToObject(whitelistFirstEntry, "create date", "2015-07-05T16:48:17"); // Seems not required by client app
   aJsonObject *swupdate;
   aJson.addItemToObject(root, "swupdate", swupdate = aJson.createObject());
   aJson.addStringToObject(swupdate, "text", "");
   aJson.addBooleanToObject(swupdate, "notify", false); // Otherwise client app shows update notice
   aJson.addNumberToObject(swupdate, "updatestate", 0);
   aJson.addStringToObject(swupdate, "url", "");
-}
-
-void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler)
-{
-  if (!lightHandler) return;
-  String lightName = "" + (String) (numberOfTheLight + 1);
-  aJsonObject *light;
-  aJson.addItemToObject(root, lightName.c_str(), light = aJson.createObject());
-  aJson.addStringToObject(light, "type", "Extended color light"); // type of lamp (all "Extended colour light" for now)
-  aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) (numberOfTheLight + 1)).c_str()); // // the name as set through the web UI or app
-  aJson.addStringToObject(light, "modelid", "LST001"); // the model number
-  aJsonObject *state;
-  aJson.addItemToObject(light, "state", state = aJson.createObject());
-  HueLightInfo info = lightHandler->getInfo(numberOfTheLight);
-  aJson.addBooleanToObject(state, "on", info.on);
-  aJson.addNumberToObject(state, "hue", info.hue); // hs mode: the hue (expressed in ~deg*182.04)
-  aJson.addNumberToObject(state, "bri", info.brightness); // brightness between 0-254 (NB 0 is not off!)
-  aJson.addNumberToObject(state, "sat", info.saturation); // hs mode: saturation between 0-254
-  double numbers[2] = {0.0, 0.0};
-  aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
-  aJson.addNumberToObject(state, "ct", 500); // ct mode: color temp (expressed in mireds range 154-500)
-  aJson.addStringToObject(state, "alert", "none"); // 'select' flash the lamp once, 'lselect' repeat flash for 30s
-  aJson.addStringToObject(state, "effect", "none"); // 'colorloop' makes Hue cycle through colors
-  aJson.addStringToObject(state, "colormode", "hs"); // the current color mode
-  aJson.addBooleanToObject(state, "reachable", true); // lamp can be seen by the hub
 }
 
 HsbColor getHsb(int hue, int sat, int bri) {
