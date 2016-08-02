@@ -17,7 +17,6 @@
 #include <NeoPixelBus.h>
 #include <NeoPixelAnimator.h> // instead of NeoPixelAnimator branch
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
-#include "xy.h"
 #include <math.h>
 
 #include "/secrets.h" // Delete this line and populate the following
@@ -430,123 +429,62 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, RgbColor rgb)
 // for color coversions instead
 // ==============================================================================================================
 
-// Is this ever needed? So far it is not being used
 // Based on http://stackoverflow.com/questions/22564187/rgb-to-philips-hue-hsb
 // The code is based on this brilliant note: https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/commit/f41091cf671e13fe8c32fcced12604cd31cceaf3
 
-struct xy getRGBtoXY(RgbColor color)
-{
-  struct xy xy_instance;
+RgbColor getXYtoRGB(float x, float y, int brightness) {
+  float bright_y = ((float)brightness) / y;
+  float X = x * bright_y;
+  float Z = (1 - x - y) * bright_y;
 
-  // RGB strips LST001 are "Gamut A" models while original bulbs LCT001 are "Gamut B"
+  // convert to RGB (0.0-1.0) color space
+  float R = X * 1.4628067 - brightness * 0.1840623 - Z * 0.2743606;
+  float G = -X * 0.5217933 + brightness * 1.4472381 + Z * 0.0677227;
+  float B = X * 0.0349342 - brightness * 0.0968930 + Z * 1.2884099;
 
-  // https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/commit/f41091cf671e13fe8c32fcced12604cd31cceaf3
-  //-For the hue bulb the corners of the triangle are "Gamut B":
-  //-Red: 0.675, 0.322
-  //-Green: 0.4091, 0.518
-  //-Blue: 0.167, 0.04
-  //-
-  //-For LivingColors Bloom, Aura and Iris the triangle corners are "Gamut A":
-  //-Red: 0.704, 0.296
-  //-Green: 0.2151, 0.7106
-  //-Blue: 0.138, 0.08
+  // apply inverse 2.2 gamma
+  float inv_gamma = 1.0 / 2.4;
+  float linear_delta = 0.055;
+  float linear_interval = 1 + linear_delta;
+  float r = R <= 0.0031308 ? 12.92 * R : (linear_interval) * pow(r, inv_gamma) - linear_delta;
+  float g = G <= 0.0031308 ? 12.92 * G : (linear_interval) * pow(g, inv_gamma) - linear_delta;
+  float b = B <= 0.0031308 ? 12.92 * B : (linear_interval) * pow(b, inv_gamma) - linear_delta;
 
-  float red, green, blue;
-  float X = (float) (red * 0.649926 + green * 0.103455 + blue * 0.197109);
-  float Y = (float) (red * 0.234327 + green * 0.743075 + blue * 0.022598);
-  float Z = (float) (red * 0.0000000 + green * 0.053077 + blue * 1.035763);
-
-  float x = X / (X + Y + Z);
-  float y = Y / (X + Y + Z);
-
-  xy_instance.x = x;
-  Serial.print("x = ");
-  Serial.println(x);
-  xy_instance.y = y;
-  Serial.print("y = ");
-  Serial.println(y);
+  return RgbColor(r * colorSaturation,
+                  g * colorSaturation,
+                  b * colorSaturation);
 }
 
-// Is this ever needed? So far it is not being used
-void rgb2xy(int R, int G, int B)
-{
-  // Convert the RGB values to XYZ using the Wide RGB D65 conversion formula
-  float X = R * 0.664511f + G * 0.154324f + B * 0.162028f;
-  float Y = R * 0.283881f + G * 0.668433f + B * 0.047685f;
-  float Z = R * 0.000088f + G * 0.072310f + B * 0.986039f;
-
-  // Calculate the xy values from the XYZ values
-  float x = X / (X + Y + Z);
-  float y = Y / (X + Y + Z);
-}
-
-HsbColor rgb2hsb(RgbColor color)
-{
-  Serial.println("Running rgb2hsb");
-  HsbColor hsb = HsbColor(color);
-  int hue, sat, bri;
-
-  Serial.println("1.: H, S, B");
-
-  //  Serial.print("H = ");
-  //  Serial.println(hsb.H);
-  //  Serial.print("S = ");
-  //  Serial.println(hsb.S);
-  //  Serial.print("B = ");
-  //  Serial.println(hsb.B);
-
-  Serial.println("2.: Convert to hue, sat, bri");
-  hue = floor(hsb.H * 182.04 * 360.0);
-  sat = floor(hsb.S * 254);
-  bri = floor(hsb.B * 254);
-  //  Serial.print("hue = ");
-  //  Serial.println(hue);
-  //  Serial.print("sat = ");
-  //  Serial.println(sat);
-  //  Serial.print("bri = ");
-  //  Serial.println(bri);
-
-  hsb.H = hue;
-  hsb.S = sat;
-  hsb.B = bri;
-
-  return (hsb);
-}
-
-RgbColor hsb2rgb(int hue, int sat, int bri)
-{
-  Serial.println("Running hsb2rgb");
-  //  Serial.println("1.: hue, sat, bri");
-  //  Serial.print("hue = ");
-  //  Serial.println(hue);
-  //  Serial.print("sat = ");
-  //  Serial.println(sat);
-  //  Serial.print("bri = ");
-  //  Serial.println(bri);
-
-  Serial.println("2.: Convert to H, S, L");
+HsbColor getHsb(int hue, int sat, int bri) {
   float H, S, B;
   H = hue / 182.04 / 360.0;
-  //  Serial.print("H = ");
-  //  Serial.println(H);
-  S = sat / 254.0; // I changed this
-  //  Serial.print("S = ");
-  //  Serial.println(S);
-  B = bri / 254.0; // I changed this as well
-  //  Serial.print("B = ");
-  //  Serial.println(B);
-  HsbColor hsb = HsbColor(H, S, B);
-
-  Serial.println("3.: Convert to RgbColor");
-  RgbColor rgb = RgbColor(hsb);
-  //  Serial.print("R = ");
-  //  Serial.println(rgb.R);
-  //  Serial.print("G = ");
-  //  Serial.println(rgb.G);
-  //  Serial.print("B = ");
-  //  Serial.println(rgb.B);
-
-  return rgb;
+  S = sat / colorSaturation;
+  B = bri / colorSaturation;
+  return HsbColor(H, S, B);
 }
 
+int getHue(HsbColor hsb) {
+  return hsb.H * 360 * 182.04;
+}
 
+int getSaturation(HsbColor hsb) {
+  return hsb.S * colorSaturation;
+}
+
+RgbColor getMirektoRGB(int mirek) {
+  int hectemp = 10000/mirek;
+  int r, g, b;
+  if (hectemp <= 66) {
+    r = colorSaturation;
+    g = 99.4708025861 * log(hectemp) - 161.1195681661;
+    b = hectemp <= 19 ? 0 : (138.5177312231 * log(hectemp - 10) - 305.0447927307);
+  } else {
+    r = 329.698727446 * pow(hectemp - 60, -0.1332047592);
+    g = 288.1221695283 * pow(hectemp - 60, -0.0755148492);
+    b = colorSaturation;
+  }
+  r = r > colorSaturation ? colorSaturation : r;
+  g = g > colorSaturation ? colorSaturation : g;
+  b = b > colorSaturation ? colorSaturation : b;
+  return RgbColor(r, g, b);
+}
