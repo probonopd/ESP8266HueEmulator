@@ -29,11 +29,16 @@ class LightHandler {
     }
 };
 
-LightHandler *getLightHandler(int numberOfTheLight);
-bool setLightHandler(int index, LightHandler *handler);
-class aJsonObject;
-HueLightInfo parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot);
-void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler);
+// Max number of exposed lights is directly related to aJSON PRINT_BUFFER_LEN, 14 for 4096
+#define MAX_LIGHT_HANDLERS 6
+#define COLOR_SATURATION 254
 
-#define MAX_LIGHT_HANDLERS 14
-#define colorSaturation 254
+class LightServiceClass {
+    public:
+      LightHandler *getLightHandler(int numberOfTheLight);
+      bool setLightHandler(int index, LightHandler *handler);
+      void begin();
+      void update();
+};
+
+extern LightServiceClass LightService;
