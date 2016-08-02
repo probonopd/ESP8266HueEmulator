@@ -344,10 +344,10 @@ char* subStr(const char* str, char *delim, int index) {
   static char copy[128]; // Length defines the maximum length of the c_string we can process
   int i;
   strcpy(copy, str); // Since strtok consumes the first arg, make a copy
-  for (i = 1, act = copy; i <= index; i++, act = NULL) {
+  for (i = 1, act = copy; i <= index; i++, act = nullptr) {
     //Serial.print(".");
     sub = strtok_r(act, delim, &ptr);
-    if (sub == NULL) break;
+    if (!sub) break;
   }
   return sub;
 }
