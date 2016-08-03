@@ -31,9 +31,9 @@ NeoPixelAnimator animator(pixelCount, NEO_MILLISECONDS); // NeoPixel animation m
 
 HsbColor getHsb(int hue, int sat, int bri) {
   float H, S, B;
-  H = hue / 182.04 / 360.0;
-  S = sat / COLOR_SATURATION;
-  B = bri / COLOR_SATURATION;
+  H = ((float)hue) / 182.04 / 360.0;
+  S = ((float)sat) / COLOR_SATURATION;
+  B = ((float)bri) / COLOR_SATURATION;
   return HsbColor(H, S, B);
 }
 
