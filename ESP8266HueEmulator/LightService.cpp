@@ -173,6 +173,7 @@ void sendError(int type, String path, String description) {
 }
 
 bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLightInfo *newInfo) {
+  *newInfo = currentInfo;
   aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
   if (onState) {
     newInfo->on = onState->valuebool;
