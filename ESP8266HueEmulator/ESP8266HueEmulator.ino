@@ -40,14 +40,41 @@ HsbColor getHsb(int hue, int sat, int bri) {
 class PixelHandler : public LightHandler {
   private:
     HueLightInfo _info;
+    int16_t colorloopIndex = -1;
   public:
     void handleQuery(int lightNumber, HueLightInfo newInfo) {
       // define the effect to apply, in this case linear blend
       HslColor newColor = HslColor(getHsb(newInfo.hue, newInfo.saturation, newInfo.brightness));
       HslColor originalColor = strip.GetPixelColor(lightNumber);
       _info = newInfo;
+
+      // cancel colorloop if one is running
+      if (colorloopIndex >= 0) {
+        animator.StopAnimation(colorloopIndex);
+        colorloopIndex = -1;
+      }
       if (newInfo.on)
       {
+        if (_info.effect == EFFECT_COLORLOOP) {
+          //color loop at max brightness/saturation on a 60 second cycle
+          const int SIXTY_SECONDS = 60000;
+          animator.StartAnimation(lightNumber, SIXTY_SECONDS, [ = ](const AnimationParam & param) {
+            // save off animation index
+            colorloopIndex = param.index;
+
+            // progress will start at 0.0 and end at 1.0
+            HslColor updatedColor = HslColor(param.progress, 1, 0.5);
+            RgbColor currentColor = updatedColor;
+            strip.SetPixelColor(lightNumber, updatedColor);
+
+            // loop the animation until canceled
+            if (param.state == AnimationState_Completed) {
+              // done, time to restart this position tracking animation/timer
+              animator.RestartAnimation(param.index);
+            }
+          });
+          return;
+        }
         AnimUpdateCallback animUpdate = [ = ](const AnimationParam & param)
         {
           // progress will start at 0.0 and end at 1.0
