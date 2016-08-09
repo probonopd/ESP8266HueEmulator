@@ -65,7 +65,7 @@ class PixelHandler : public LightHandler {
             // progress will start at 0.0 and end at 1.0
             float currentHue = newColor.H + param.progress;
             if (currentHue > 1) currentHue -= 1;
-            HslColor updatedColor = HslColor(currentHue, 1, 0.5);
+            HslColor updatedColor = HslColor(currentHue, newColor.S, newColor.L);
             RgbColor currentColor = updatedColor;
             strip.SetPixelColor(lightNumber, updatedColor);
 
