@@ -67,7 +67,7 @@ void LightServiceClass::begin() {
 
   HTTP.begin();
 
-  Serial.printf("Starting SSDP...\n");
+  Serial.println("Starting SSDP...");
   SSDP.begin();
   SSDP.setSchemaURL((char*)"description.xml");
   SSDP.setHTTPPort(80);
@@ -266,9 +266,9 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHa
 void addConfigJson(aJsonObject *root)
 {
   aJson.addStringToObject(root, "name", "hue emulator");
-  aJson.addStringToObject(root, "swversion", "0.1");
-  // aJson.addBooleanToObject(root, "portalservices", false);
-  // aJson.addStringToObject(root, "zigbeechannel", "0"); // As per spec, 0 is allowed
+  aJson.addStringToObject(root, "swversion", "001");
+  aJson.addBooleanToObject(root, "portalservices", false);
+  aJson.addBooleanToObject(root, "linkbutton", false);
   aJson.addStringToObject(root, "mac", macString.c_str());
   aJson.addBooleanToObject(root, "dhcp", true);
   aJson.addStringToObject(root, "ipaddress", ipString.c_str());
