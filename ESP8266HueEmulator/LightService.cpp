@@ -143,7 +143,7 @@ int getSaturation(HsbColor hsb) {
 }
 
 RgbColor getMirektoRGB(int mirek) {
-  int hectemp = 10000/mirek;
+  int hectemp = 10000 / mirek;
   int r, g, b;
   if (hectemp <= 66) {
     r = COLOR_SATURATION;
@@ -266,7 +266,7 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHa
 void addConfigJson(aJsonObject *root)
 {
   aJson.addStringToObject(root, "name", "hue emulator");
-  aJson.addStringToObject(root, "swversion", "001");
+  aJson.addStringToObject(root, "swversion", "81012917");
   aJson.addBooleanToObject(root, "portalservices", false);
   aJson.addBooleanToObject(root, "linkbutton", false);
   aJson.addStringToObject(root, "mac", macString.c_str());
@@ -274,6 +274,7 @@ void addConfigJson(aJsonObject *root)
   aJson.addStringToObject(root, "ipaddress", ipString.c_str());
   aJson.addStringToObject(root, "netmask", netmaskString.c_str());
   aJson.addStringToObject(root, "gateway", gatewayString.c_str());
+  aJson.addStringToObject(root, "apiversion", "1.3.0");
   aJsonObject *whitelist;
   aJson.addItemToObject(root, "whitelist", whitelist = aJson.createObject());
   aJsonObject *whitelistFirstEntry;
