@@ -454,6 +454,11 @@ void groupsHandler(String user, String uri) {
 }
 
 void scenesHandler(String user, String uri) {
+  uri = trimSlash(uri.substring(6));
+  if (uri == "" && HTTP.method() == HTTP_GET) {
+    HTTP.send(200, "text/plain", "{}");
+    return;
+  }
   // no part of /api/user/scenes is supported, so all methods are unsupported
   sendError(4, "/api/" + user + "/" + uri, "Method not supported for scenes");
 }
