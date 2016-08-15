@@ -22,9 +22,21 @@ LightServiceClass LightService;
 LightHandler *lightHandlers[MAX_LIGHT_HANDLERS]; // interfaces exposed to the outside world
 
 bool LightServiceClass::setLightHandler(int index, LightHandler *handler) {
-  if (index >= MAX_LIGHT_HANDLERS || index < 0) return false;
+  if (index >= currentNumLights || index < 0) return false;
   lightHandlers[index] = handler;
   return true;
+}
+
+bool LightServiceClass::setLightsAvailable(int lights) {
+  if (lights <= MAX_LIGHT_HANDLERS) {
+    currentNumLights = lights;
+    return true;
+  }
+  return false;
+}
+
+int LightServiceClass::getLightsAvailable() {
+  return currentNumLights;
 }
 
 String StringIPaddress(IPAddress myaddr)
@@ -39,7 +51,7 @@ String StringIPaddress(IPAddress myaddr)
 }
 
 LightHandler *LightServiceClass::getLightHandler(int numberOfTheLight) {
-  if (numberOfTheLight >= MAX_LIGHT_HANDLERS || numberOfTheLight < 0) {
+  if (numberOfTheLight >= currentNumLights || numberOfTheLight < 0) {
     return nullptr;
   }
 
@@ -264,7 +276,7 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHa
 }
 
 void addLightsJson(aJsonObject *lights) {
-  for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
+  for (int i = 0; i < LightService.getLightsAvailable(); i++) {
     addLightJson(lights, i, LightService.getLightHandler(i));
   }
 }
@@ -423,7 +435,7 @@ void groupsHandler(String user, String uri) {
   Serial.println(HTTP.arg("plain"));
   aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
   if (parsedRoot) {
-    for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
+    for (int i = 0; i < LightService.getLightsAvailable(); i++) {
       LightHandler *handler = LightService.getLightHandler(i);
       HueLightInfo currentInfo = handler->getInfo(i);
       HueLightInfo newInfo;

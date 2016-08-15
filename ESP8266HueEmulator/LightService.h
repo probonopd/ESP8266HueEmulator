@@ -36,9 +36,13 @@ class LightHandler {
 class LightServiceClass {
     public:
       LightHandler *getLightHandler(int numberOfTheLight);
+      bool setLightsAvailable(int numLights);
+      int getLightsAvailable();
       bool setLightHandler(int index, LightHandler *handler);
       void begin();
       void update();
+    private:
+      int currentNumLights = MAX_LIGHT_HANDLERS;
 };
 
 extern LightServiceClass LightService;
