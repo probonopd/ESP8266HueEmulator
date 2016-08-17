@@ -184,6 +184,20 @@ void sendError(int type, String path, String description) {
   sendJson(root);
 }
 
+void sendSuccess(String id, String value) {
+  aJsonObject *search = aJson.createArray();
+  aJsonObject *container = aJson.createObject();
+  aJson.addItemToArray(search, container);
+  aJsonObject *succeed = aJson.createObject();
+  aJson.addItemToObject(container, "success", succeed);
+  aJson.addStringToObject(succeed, id.c_str(), value.c_str());
+  sendJson(search);
+}
+
+void sendUpdated() {
+  HTTP.send(200, "text/plain", "Updated.");
+}
+
 bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLightInfo *newInfo) {
   *newInfo = currentInfo;
   aJsonObject* onState = aJson.getObjectItem(parsedRoot, "on");
@@ -328,9 +342,7 @@ void authHandler(String user, String uri) {
   Serial.println("CLIENT: ");
   Serial.println(username);
 
-  String str = "[{\"success\":{\"username\": \"" + username + "\"}}]";
-  HTTP.send(200, "text/plain", str);
-  Serial.println(str);
+  sendSuccess("username", username);
 }
 
 void lightsHandler(String user, String uri) {
@@ -346,13 +358,7 @@ void lightsHandler(String user, String uri) {
         }
       case HTTP_POST: {
           // "start" a "search" for "new" lights
-          aJsonObject *search = aJson.createArray();
-          aJsonObject *container = aJson.createObject();
-          aJson.addItemToArray(search, container);
-          aJsonObject *succeed = aJson.createObject();
-          aJson.addItemToObject(container, "success", succeed);
-          aJson.addStringToObject(succeed, "/lights", "Searching for new devices");
-          sendJson(search);
+          sendSuccess("/lights", "Searching for new devices");
           break;
         }
     }
@@ -446,7 +452,7 @@ void groupsHandler(String user, String uri) {
     aJson.deleteItem(parsedRoot);
 
     // As per the spec, the response can be "Updated." for memory-constrained devices
-    HTTP.send(200, "text/plain", "Updated.");
+    sendUpdated();
   } else if (HTTP.arg("plain") != "") {
     // unparseable json
     sendError(2, "groups/0/action", "Bad JSON body in request");
