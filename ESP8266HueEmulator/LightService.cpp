@@ -397,6 +397,7 @@ void lightsHandler(String user, String uri) {
     } else if (HTTP.arg("plain") != "") {
       // unparseable json
       sendError(2, "groups/0/action", "Bad JSON body in request");
+      return;
     }
 
     aJsonObject *root;
@@ -406,37 +407,17 @@ void lightsHandler(String user, String uri) {
   }
 }
 
-void groupsHandler(String user, String uri) {
-  uri = trimSlash(uri.substring(6));
-  if (uri == "" && HTTP.method() == HTTP_GET) {
-    HTTP.send(200, "text/plain", "{}");
-    return;
+aJsonObject *validateGroupCreateBody(String body) {
+  aJsonObject *root = aJson.parse(( char*) body.c_str());
+  aJsonObject* jName = aJson.getObjectItem(root, "name");
+  aJsonObject* jLights = aJson.getObjectItem(root, "lights");
+  if (!jName || !jLights) {
+    return nullptr;
   }
-  if (uri.endsWith("action")) {
-    // rip of /action
-    uri = uri.substring(0, uri.length() - 7);
-  } else {
-    // no support for creation, deletion, updating, etc.
-    String resource = "/api/";
-    resource += user;
-    resource += "/groups/";
-    resource += uri;
-    sendError(4, resource, "Group modification not supported");
-    return;
-  }
-  int groupNum = atoi(uri.c_str());
-  if (groupNum != 0) {
-    // only group 0 supported
-    String resource = "/api/";
-    resource += user;
-    resource += "/groups/";
-    resource += groupNum;
-    resource += "/action";
-    sendError(3, resource, "No such group");
-    return;
-  }
+  return root;
+}
 
-  // parse input as if for all lights
+void applyConfigToLightMask(unsigned int lights) {
   Serial.print("JSON Body:");
   Serial.println(HTTP.arg("plain"));
   aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
@@ -456,6 +437,185 @@ void groupsHandler(String user, String uri) {
   } else if (HTTP.arg("plain") != "") {
     // unparseable json
     sendError(2, "groups/0/action", "Bad JSON body in request");
+  }
+}
+
+class LightGroup {
+  public:
+    LightGroup(aJsonObject *root) {
+      aJsonObject* jName = aJson.getObjectItem(root, "name");
+      aJsonObject* jLights = aJson.getObjectItem(root, "lights");
+      // jName and jLights guaranteed to exist
+      name = jName->valuestring;
+      for (int i = 0; i < aJson.getArraySize(jLights); i++) {
+        aJsonObject* jLight = aJson.getArrayItem(jLights, i);
+        // lights are 1-based and map to the 0-based bitfield
+        int lightNum = atoi(jLight->valuestring);
+        if (lightNum != 0) {
+          lights |= (1 << (lightNum - 1));
+        }
+      }
+    }
+    aJsonObject *getJson() {
+      aJsonObject *object = aJson.createObject();
+      aJson.addStringToObject(object, "name", name.c_str());
+      aJsonObject *lightsArray = aJson.createArray();
+      aJson.addItemToObject(object, "lights", lightsArray);
+      for (int i = 0; i < 16; i++) {
+        if (!((1 << i) & lights)) {
+          continue;
+        }
+        // add light to list
+        String lightNum = "";
+        lightNum += (i + 1);
+        aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
+      }
+      return object;
+    }
+    unsigned int getLightMask() {
+      return lights;
+    }
+  private:
+    String name;
+    // use unsigned int to hold members of this group. 2 bytes -> supports up to 16 lights
+    unsigned int lights = 0;
+    // no need to hold the group type, only LightGroup is supported for API 1.4
+};
+
+LightGroup *lightGroups[16] = {nullptr, };
+
+// returns true on failure
+bool updateGroupSlot(int slot, String body) {
+  aJsonObject *root;
+  if (body != "") {
+    Serial.print("JSON Body:");
+    Serial.println(body);
+    root = validateGroupCreateBody(body);
+  }
+  if (!root && body != "") {
+    // throw error bad body
+    sendError(2, "groups/" + (slot + 1), "Bad JSON body");
+    return true;
+  }
+  if (lightGroups[slot]) {
+    delete lightGroups[slot];
+    lightGroups[slot] = nullptr;
+  }
+  if (body != "") {
+    lightGroups[slot] = new LightGroup(root);
+    aJson.deleteItem(root);
+  }
+  return false;
+}
+
+void groupCreationHandler() {
+  // handle group creation
+  // find first available group slot
+  int availableSlot = -1;
+  for (int i = 0; i < 16; i++) {
+    if (!lightGroups[i]) {
+      availableSlot = i;
+      break;
+    }
+  }
+  if (availableSlot == -1) {
+    // throw error no new groups allowed
+    sendError(301, "groups", "Groups table full");
+    return;
+  }
+  if (!updateGroupSlot(availableSlot, HTTP.arg("plain"))) {
+    String slot = "";
+    slot += (availableSlot + 1);
+    sendSuccess("id", slot);
+  }
+}
+
+void groupListingHandler() {
+  // iterate over groups and serialize
+  aJsonObject *root = aJson.createObject();
+  for (int i = 0; i < 16; i++) {
+    if (lightGroups[i]) {
+      String sIndex = "";
+      sIndex += (i + 1);
+      aJson.addItemToObject(root, sIndex.c_str(), lightGroups[i]->getJson());
+    }
+  }
+  sendJson(root);
+}
+
+void groupsHandler(String user, String uri) {
+  uri = trimSlash(uri.substring(6));
+  if (uri == "") {
+    switch (HTTP.method()) {
+      case HTTP_GET:
+        groupListingHandler();
+        break;
+      case HTTP_POST:
+        groupCreationHandler();
+        break;
+      default:
+        sendError(4, "/api/" + user + "/groups", "Group method not supported");
+        break;
+    }
+    return;
+  }
+
+  int nextSlash = uri.indexOf("/");
+  int groupNum = -1;
+  String groupNumText;
+  if (nextSlash == -1) {
+    groupNumText = uri;
+    uri = "";
+  } else {
+    groupNumText = uri.substring(0, nextSlash);
+    uri = trimSlash(uri.substring(nextSlash));
+  }
+  groupNum = atoi(groupNumText.c_str()) - 1;
+  if ((groupNum == -1 && groupNumText != "0") || groupNum >= 16 || (groupNum >= 0 && !lightGroups[groupNum])) {
+    // error, invalid group number
+    String resource = "/api/";
+    resource += user;
+    resource += "/groups/";
+    resource += groupNumText;
+    sendError(3, resource, "Invalid group number");
+    return;
+  }
+
+  if (uri == "") {
+    switch (HTTP.method()) {
+      case HTTP_GET:
+        sendJson(lightGroups[groupNum]->getJson());
+        break;
+      case HTTP_PUT:
+        // validate body, delete old group, create new group
+        updateGroupSlot(groupNum, HTTP.arg("plain"));
+        sendUpdated();
+        break;
+      case HTTP_DELETE:
+        updateGroupSlot(groupNum, "");
+        break;
+      default:
+        sendError(4, "/api/" + user + "/groups", "Group method not supported");
+        break;
+    }
+    return;
+  }
+
+  if (uri == "action") {
+    if (HTTP.method() != HTTP_PUT) {
+      // error, only PUT allowed
+      sendError(4, "/api/" + user + "/groups/" + groupNum + "/action", "Only PUT supported for groups/*/action");
+      return;
+    }
+    // parse input as if for all lights
+    unsigned int lightMask;
+    if (groupNum == -1) {
+      lightMask == 0xFFFF;
+    } else {
+      lightMask = lightGroups[groupNum]->getLightMask();
+    }
+    // apply to group
+    applyConfigToLightMask(lightMask);
   }
 }
 
