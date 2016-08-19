@@ -11,7 +11,10 @@ Please note that currently only the bare minimum to advertise the emulated Hue b
 
 ## Usage
 
-* Build [esp8266/Arduino](https://github.com/esp8266/Arduino) from git - the Boards Manager version is not recent enough as of July 2015
+* I used [Arduino-1.6.11.hourly201608161225.esp497d19d-x86_64.AppImage](https://bintray.com/probono/AppImages/Arduino#files) which comes with both the Arduino IDE and esp8266/Arduino ready-to-use
+* Use recent version of [esp8266/Arduino](https://github.com/esp8266/Arduino) 
+* In the Arduino IDE, Open the Library Manager and search for "NeoPixelBus by Makuna" and install
+* Download https://github.com/interactive-matter/aJson/archive/master.zip and install the library via the Arduino IDE
 * Edit the sketch to contain your WLAN credentials
 * Load the sketch onto your ESP-01 or other ESP8266 device
 * Optionally connect the DATA line of your WS2812b NeoPixels to pin GPIO2 (you do not really need this in order to test communication between the sketch and Hue client apps)
