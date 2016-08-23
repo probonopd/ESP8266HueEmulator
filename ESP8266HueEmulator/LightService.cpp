@@ -22,9 +22,21 @@ LightServiceClass LightService;
 LightHandler *lightHandlers[MAX_LIGHT_HANDLERS]; // interfaces exposed to the outside world
 
 bool LightServiceClass::setLightHandler(int index, LightHandler *handler) {
-  if (index >= MAX_LIGHT_HANDLERS || index < 0) return false;
+  if (index >= currentNumLights || index < 0) return false;
   lightHandlers[index] = handler;
   return true;
+}
+
+bool LightServiceClass::setLightsAvailable(int lights) {
+  if (lights <= MAX_LIGHT_HANDLERS) {
+    currentNumLights = lights;
+    return true;
+  }
+  return false;
+}
+
+int LightServiceClass::getLightsAvailable() {
+  return currentNumLights;
 }
 
 String StringIPaddress(IPAddress myaddr)
@@ -39,7 +51,7 @@ String StringIPaddress(IPAddress myaddr)
 }
 
 LightHandler *LightServiceClass::getLightHandler(int numberOfTheLight) {
-  if (numberOfTheLight >= MAX_LIGHT_HANDLERS || numberOfTheLight < 0) {
+  if (numberOfTheLight >= currentNumLights || numberOfTheLight < 0) {
     return nullptr;
   }
 
@@ -143,7 +155,7 @@ int getSaturation(HsbColor hsb) {
 }
 
 RgbColor getMirektoRGB(int mirek) {
-  int hectemp = 10000/mirek;
+  int hectemp = 10000 / mirek;
   int r, g, b;
   if (hectemp <= 66) {
     r = COLOR_SATURATION;
@@ -170,6 +182,20 @@ void sendError(int type, String path, String description) {
   aJson.addItemToObject(errorContainer, "error", errorObject);
   aJson.addItemToArray(root, errorContainer);
   sendJson(root);
+}
+
+void sendSuccess(String id, String value) {
+  aJsonObject *search = aJson.createArray();
+  aJsonObject *container = aJson.createObject();
+  aJson.addItemToArray(search, container);
+  aJsonObject *succeed = aJson.createObject();
+  aJson.addItemToObject(container, "success", succeed);
+  aJson.addStringToObject(succeed, id.c_str(), value.c_str());
+  sendJson(search);
+}
+
+void sendUpdated() {
+  HTTP.send(200, "text/plain", "Updated.");
 }
 
 bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLightInfo *newInfo) {
@@ -263,10 +289,16 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHa
   aJson.addBooleanToObject(state, "reachable", true); // lamp can be seen by the hub
 }
 
+void addLightsJson(aJsonObject *lights) {
+  for (int i = 0; i < LightService.getLightsAvailable(); i++) {
+    addLightJson(lights, i, LightService.getLightHandler(i));
+  }
+}
+
 void addConfigJson(aJsonObject *root)
 {
   aJson.addStringToObject(root, "name", "hue emulator");
-  aJson.addStringToObject(root, "swversion", "001");
+  aJson.addStringToObject(root, "swversion", "81012917");
   aJson.addBooleanToObject(root, "portalservices", false);
   aJson.addBooleanToObject(root, "linkbutton", false);
   aJson.addStringToObject(root, "mac", macString.c_str());
@@ -274,6 +306,7 @@ void addConfigJson(aJsonObject *root)
   aJson.addStringToObject(root, "ipaddress", ipString.c_str());
   aJson.addStringToObject(root, "netmask", netmaskString.c_str());
   aJson.addStringToObject(root, "gateway", gatewayString.c_str());
+  aJson.addStringToObject(root, "apiversion", "1.3.0");
   aJsonObject *whitelist;
   aJson.addItemToObject(root, "whitelist", whitelist = aJson.createObject());
   aJsonObject *whitelistFirstEntry;
@@ -287,92 +320,69 @@ void addConfigJson(aJsonObject *root)
   aJson.addStringToObject(swupdate, "url", "");
 }
 
-// Function to return a substring defined by a delimiter at an index
-// From http://forum.arduino.cc/index.php?topic=41389.msg301116#msg301116
-char* subStr(const char* str, char *delim, int index) {
-  char *act, *sub, *ptr;
-  static char copy[128]; // Length defines the maximum length of the c_string we can process
-  int i;
-  strcpy(copy, str); // Since strtok consumes the first arg, make a copy
-  for (i = 1, act = copy; i <= index; i++, act = nullptr) {
-    //Serial.print(".");
-    sub = strtok_r(act, delim, &ptr);
-    if (!sub) break;
+String trimSlash(String uri) {
+  if (uri.startsWith("/")) {
+    uri.remove(0, 1);
   }
-  return sub;
+  return uri;
 }
 
-void handleAllOthers() {
-  Serial.println("===");
-  Serial.println(millis());
-  String requestedUri = HTTP.uri();
-  Serial.print("requestedUri: ");
-  Serial.println(requestedUri);
+void configHandler(String user, String uri) {
+  aJsonObject *root;
+  root = aJson.createObject();
+  addConfigJson(root);
+  sendJson(root);
+}
 
-  if ( requestedUri.endsWith("/config") )
-  {
-    aJsonObject *root;
-    root = aJson.createObject();
-    addConfigJson(root);
-    sendJson(root);
-  }
+void authHandler(String user, String uri) {
+  // On the real bridge, the link button on the bridge must have been recently pressed for the command to execute successfully.
+  // We try to execute successfully regardless of a button for now.
+  isAuthorized = true; // FIXME: Instead, we should persist (save) the username and put it on the whitelist
+  String username = "api";
+  Serial.println("CLIENT: ");
+  Serial.println(username);
 
-  else if ((requestedUri.startsWith("/api") and (requestedUri.lastIndexOf("/") == 4 )))
-  {
-    // Serial.println("Respond with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
-    aJsonObject *root;
-    root = aJson.createObject();
-    aJsonObject *groups;
-    aJson.addItemToObject(root, "groups", groups = aJson.createObject());
-    aJsonObject *scenes;
-    aJson.addItemToObject(root, "scenes", scenes = aJson.createObject());
-    aJsonObject *config;
-    aJson.addItemToObject(root, "config", config = aJson.createObject());
-    addConfigJson(config);
-    aJsonObject *lights;
-    aJson.addItemToObject(root, "lights", lights = aJson.createObject());
-    for (int i = 0; i < MAX_LIGHT_HANDLERS; i++)
-      addLightJson(lights, i, LightService.getLightHandler(i));
-    aJsonObject *schedules;
-    aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
-    sendJson(root);
-  }
+  sendSuccess("username", username);
+}
 
-  else if (requestedUri.endsWith("/api"))
-    // On the real bridge, the link button on the bridge must have been recently pressed for the command to execute successfully.
-    // We try to execute successfully regardless of a button for now.
-  {
-    isAuthorized = true; // FIXME: Instead, we should persist (save) the username and put it on the whitelist
-    client = subStr(requestedUri.c_str(), "/", 1);
-    Serial.println("CLIENT: ");
-    Serial.println(client);
-
-    String str = "[{\"success\":{\"username\": \"" + client + "\"}}]";
-    HTTP.send(200, "text/plain", str);
-    Serial.println(str);
-  }
-
-  else if (requestedUri.endsWith("/state"))
-  {
-    // For this to work we need a patched version of esp8266/libraries/ESP8266WebServer/src/Parsing.cpp which hopefully lands in the official channel soon
-    // https://github.com/me-no-dev/Arduino/blob/d4894b115e3bbe753a47b1645a55cab7c62d04e2/hardware/esp8266com/esp8266/libraries/ESP8266WebServer/src/Parsing.cpp
-    if (HTTP.arg("plain") == "")
-    {
-      Serial.println("You need to use a newer version of the ESP8266WebServer library from https://github.com/me-no-dev/Arduino/blob/d4894b115e3bbe753a47b1645a55cab7c62d04e2/hardware/esp8266com/esp8266/libraries/ESP8266WebServer/src/Parsing.cpp");
-      yield();
+void lightsHandler(String user, String uri) {
+  uri = trimSlash(uri.substring(6));
+  if (uri == "") {
+    switch (HTTP.method()) {
+      case HTTP_GET: {
+          // dump existing lights
+          aJsonObject *lights = aJson.createObject();
+          addLightsJson(lights);
+          sendJson(lights);
+          break;
+        }
+      case HTTP_POST: {
+          // "start" a "search" for "new" lights
+          sendSuccess("/lights", "Searching for new devices");
+          break;
+        }
     }
+    return;
+  }
+  if (uri == "new") {
+    // dump empty object
+    aJsonObject *lights = aJson.createObject();
+    sendJson(lights);
+    return;
+  }
+
+  // individual light state request
+  if (uri.endsWith("state")) {
+    // remove "/state"
+    String lightText = uri.substring(0, uri.length() - 6);
+    int numberOfTheLight = atoi(lightText.c_str()) - 1;
+
+    Serial.print("JSON Body:");
     Serial.println(HTTP.arg("plain"));
-    int numberOfTheLight = atoi(subStr(requestedUri.c_str(), "/", 4)) - 1; // The number of the light to be switched; they start with 1
-    if (numberOfTheLight == -1) {
-      numberOfTheLight = atoi(subStr(requestedUri.c_str(), "/", 3)) - 1;
-    }
-    Serial.print("Number of the light --> ");
-    Serial.println(numberOfTheLight);
     aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
     LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
     if (!handler) {
-      sendError(3, requestedUri, "Requested light not available");
-      Serial.println(millis());
+      sendError(3, uri, "Requested light not available");
       return;
     }
     HueLightInfo currentInfo = handler->getInfo(numberOfTheLight);
@@ -380,11 +390,14 @@ void handleAllOthers() {
       HueLightInfo newInfo;
       if (!parseHueLightInfo(currentInfo, parsedRoot, &newInfo)) {
         aJson.deleteItem(parsedRoot);
-        Serial.println(millis());
         return;
       }
       aJson.deleteItem(parsedRoot);
       handler->handleQuery(numberOfTheLight, newInfo);
+    } else if (HTTP.arg("plain") != "") {
+      // unparseable json
+      sendError(2, "groups/0/action", "Bad JSON body in request");
+      return;
     }
 
     aJsonObject *root;
@@ -392,24 +405,331 @@ void handleAllOthers() {
     addLightJson(root, numberOfTheLight, handler);
     sendJson(root);
   }
+}
 
-  else if (requestedUri == "/description.xml")
-  {
-    WiFiClient client = HTTP.client();
-    String str = "<root><specVersion><major>1</major><minor>0</minor></specVersion><URLBase>http://" + ipString + ":80/</URLBase><device><deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType><friendlyName>Philips hue (" + ipString + ")</friendlyName><manufacturer>Royal Philips Electronics</manufacturer><manufacturerURL>http://www.philips.com</manufacturerURL><modelDescription>Philips hue Personal Wireless Lighting</modelDescription><modelName>Philips hue bridge 2012</modelName><modelNumber>929000226503</modelNumber><modelURL>http://www.meethue.com</modelURL><serialNumber>00178817122c</serialNumber><UDN>uuid:2f402f80-da50-11e1-9b23-00178817122c</UDN><presentationURL>index.html</presentationURL><iconList><icon><mimetype>image/png</mimetype><height>48</height><width>48</width><depth>24</depth><url>hue_logo_0.png</url></icon><icon><mimetype>image/png</mimetype><height>120</height><width>120</width><depth>24</depth><url>hue_logo_3.png</url></icon></iconList></device></root>";
-    HTTP.send(200, "text/plain", str);
-    Serial.println(str);
-    Serial.println("I assume this is working since with this, Chroma for Hue finds a Bridge, so does the Hue iOS app. In constrast, without this they say no Bridge found.");
+aJsonObject *validateGroupCreateBody(String body) {
+  aJsonObject *root = aJson.parse(( char*) body.c_str());
+  aJsonObject* jName = aJson.getObjectItem(root, "name");
+  aJsonObject* jLights = aJson.getObjectItem(root, "lights");
+  if (!jName || !jLights) {
+    return nullptr;
+  }
+  return root;
+}
+
+void applyConfigToLightMask(unsigned int lights) {
+  Serial.print("JSON Body:");
+  Serial.println(HTTP.arg("plain"));
+  aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
+  if (parsedRoot) {
+    for (int i = 0; i < LightService.getLightsAvailable(); i++) {
+      LightHandler *handler = LightService.getLightHandler(i);
+      HueLightInfo currentInfo = handler->getInfo(i);
+      HueLightInfo newInfo;
+      if (parseHueLightInfo(currentInfo, parsedRoot, &newInfo)) {
+        handler->handleQuery(i, newInfo);
+      }
+    }
+    aJson.deleteItem(parsedRoot);
+
+    // As per the spec, the response can be "Updated." for memory-constrained devices
+    sendUpdated();
+  } else if (HTTP.arg("plain") != "") {
+    // unparseable json
+    sendError(2, "groups/0/action", "Bad JSON body in request");
+  }
+}
+
+class LightGroup {
+  public:
+    LightGroup(aJsonObject *root) {
+      aJsonObject* jName = aJson.getObjectItem(root, "name");
+      aJsonObject* jLights = aJson.getObjectItem(root, "lights");
+      // jName and jLights guaranteed to exist
+      name = jName->valuestring;
+      for (int i = 0; i < aJson.getArraySize(jLights); i++) {
+        aJsonObject* jLight = aJson.getArrayItem(jLights, i);
+        // lights are 1-based and map to the 0-based bitfield
+        int lightNum = atoi(jLight->valuestring);
+        if (lightNum != 0) {
+          lights |= (1 << (lightNum - 1));
+        }
+      }
+    }
+    aJsonObject *getJson() {
+      aJsonObject *object = aJson.createObject();
+      aJson.addStringToObject(object, "name", name.c_str());
+      aJsonObject *lightsArray = aJson.createArray();
+      aJson.addItemToObject(object, "lights", lightsArray);
+      for (int i = 0; i < 16; i++) {
+        if (!((1 << i) & lights)) {
+          continue;
+        }
+        // add light to list
+        String lightNum = "";
+        lightNum += (i + 1);
+        aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
+      }
+      return object;
+    }
+    unsigned int getLightMask() {
+      return lights;
+    }
+  private:
+    String name;
+    // use unsigned int to hold members of this group. 2 bytes -> supports up to 16 lights
+    unsigned int lights = 0;
+    // no need to hold the group type, only LightGroup is supported for API 1.4
+};
+
+LightGroup *lightGroups[16] = {nullptr, };
+
+// returns true on failure
+bool updateGroupSlot(int slot, String body) {
+  aJsonObject *root;
+  if (body != "") {
+    Serial.print("JSON Body:");
+    Serial.println(body);
+    root = validateGroupCreateBody(body);
+  }
+  if (!root && body != "") {
+    // throw error bad body
+    sendError(2, "groups/" + (slot + 1), "Bad JSON body");
+    return true;
+  }
+  if (lightGroups[slot]) {
+    delete lightGroups[slot];
+    lightGroups[slot] = nullptr;
+  }
+  if (body != "") {
+    lightGroups[slot] = new LightGroup(root);
+    aJson.deleteItem(root);
+  }
+  return false;
+}
+
+void groupCreationHandler() {
+  // handle group creation
+  // find first available group slot
+  int availableSlot = -1;
+  for (int i = 0; i < 16; i++) {
+    if (!lightGroups[i]) {
+      availableSlot = i;
+      break;
+    }
+  }
+  if (availableSlot == -1) {
+    // throw error no new groups allowed
+    sendError(301, "groups", "Groups table full");
+    return;
+  }
+  if (!updateGroupSlot(availableSlot, HTTP.arg("plain"))) {
+    String slot = "";
+    slot += (availableSlot + 1);
+    sendSuccess("id", slot);
+  }
+}
+
+void groupListingHandler() {
+  // iterate over groups and serialize
+  aJsonObject *root = aJson.createObject();
+  for (int i = 0; i < 16; i++) {
+    if (lightGroups[i]) {
+      String sIndex = "";
+      sIndex += (i + 1);
+      aJson.addItemToObject(root, sIndex.c_str(), lightGroups[i]->getJson());
+    }
+  }
+  sendJson(root);
+}
+
+void groupsHandler(String user, String uri) {
+  uri = trimSlash(uri.substring(6));
+  if (uri == "") {
+    switch (HTTP.method()) {
+      case HTTP_GET:
+        groupListingHandler();
+        break;
+      case HTTP_POST:
+        groupCreationHandler();
+        break;
+      default:
+        sendError(4, "/api/" + user + "/groups", "Group method not supported");
+        break;
+    }
+    return;
   }
 
-  else
-  {
+  int nextSlash = uri.indexOf("/");
+  int groupNum = -1;
+  String groupNumText;
+  if (nextSlash == -1) {
+    groupNumText = uri;
+    uri = "";
+  } else {
+    groupNumText = uri.substring(0, nextSlash);
+    uri = trimSlash(uri.substring(nextSlash));
+  }
+  groupNum = atoi(groupNumText.c_str()) - 1;
+  if ((groupNum == -1 && groupNumText != "0") || groupNum >= 16 || (groupNum >= 0 && !lightGroups[groupNum])) {
+    // error, invalid group number
+    String resource = "/api/";
+    resource += user;
+    resource += "/groups/";
+    resource += groupNumText;
+    sendError(3, resource, "Invalid group number");
+    return;
+  }
+
+  if (uri == "") {
+    switch (HTTP.method()) {
+      case HTTP_GET:
+        sendJson(lightGroups[groupNum]->getJson());
+        break;
+      case HTTP_PUT:
+        // validate body, delete old group, create new group
+        updateGroupSlot(groupNum, HTTP.arg("plain"));
+        sendUpdated();
+        break;
+      case HTTP_DELETE:
+        updateGroupSlot(groupNum, "");
+        break;
+      default:
+        sendError(4, "/api/" + user + "/groups", "Group method not supported");
+        break;
+    }
+    return;
+  }
+
+  if (uri == "action") {
+    if (HTTP.method() != HTTP_PUT) {
+      // error, only PUT allowed
+      sendError(4, "/api/" + user + "/groups/" + groupNum + "/action", "Only PUT supported for groups/*/action");
+      return;
+    }
+    // parse input as if for all lights
+    unsigned int lightMask;
+    if (groupNum == -1) {
+      lightMask == 0xFFFF;
+    } else {
+      lightMask = lightGroups[groupNum]->getLightMask();
+    }
+    // apply to group
+    applyConfigToLightMask(lightMask);
+  }
+}
+
+void scenesHandler(String user, String uri) {
+  uri = trimSlash(uri.substring(6));
+  if (uri == "" && HTTP.method() == HTTP_GET) {
+    HTTP.send(200, "text/plain", "{}");
+    return;
+  }
+  // no part of /api/user/scenes is supported, so all methods are unsupported
+  sendError(4, "/api/" + user + "/" + uri, "Method not supported for scenes");
+}
+
+void wholeConfigHandler(String user, String uri) {
+  // Serial.println("Respond with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
+  aJsonObject *root;
+  root = aJson.createObject();
+  aJsonObject *groups;
+  // the default group 0 is never listed
+  aJson.addItemToObject(root, "groups", groups = aJson.createObject());
+  aJsonObject *scenes;
+  aJson.addItemToObject(root, "scenes", scenes = aJson.createObject());
+  aJsonObject *config;
+  aJson.addItemToObject(root, "config", config = aJson.createObject());
+  addConfigJson(config);
+  aJsonObject *lights;
+  aJson.addItemToObject(root, "lights", lights = aJson.createObject());
+  addLightsJson(lights);
+  aJsonObject *schedules;
+  aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
+  sendJson(root);
+}
+
+void descriptionHandler(String user, String uri) {
+  WiFiClient client = HTTP.client();
+  String str = "<root><specVersion><major>1</major><minor>0</minor></specVersion><URLBase>http://" + ipString + ":80/</URLBase><device><deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType><friendlyName>Philips hue (" + ipString + ")</friendlyName><manufacturer>Royal Philips Electronics</manufacturer><manufacturerURL>http://www.philips.com</manufacturerURL><modelDescription>Philips hue Personal Wireless Lighting</modelDescription><modelName>Philips hue bridge 2012</modelName><modelNumber>929000226503</modelNumber><modelURL>http://www.meethue.com</modelURL><serialNumber>00178817122c</serialNumber><UDN>uuid:2f402f80-da50-11e1-9b23-00178817122c</UDN><presentationURL>index.html</presentationURL><iconList><icon><mimetype>image/png</mimetype><height>48</height><width>48</width><depth>24</depth><url>hue_logo_0.png</url></icon><icon><mimetype>image/png</mimetype><height>120</height><width>120</width><depth>24</depth><url>hue_logo_3.png</url></icon></iconList></device></root>";
+  HTTP.send(200, "text/plain", str);
+  Serial.println(str);
+}
+
+String methodToString(int method) {
+  switch (method) {
+    case HTTP_POST: return "POST";
+    case HTTP_GET: return "GET";
+    case HTTP_PUT: return "PUT";
+    case HTTP_PATCH: return "PATCH";
+    case HTTP_DELETE: return "DELETE";
+    case HTTP_OPTIONS: return "OPTIONS";
+    default: return "unknown";
+  }
+}
+
+void handleAllOthers() {
+  Serial.print("=== ");
+  Serial.println(millis());
+  Serial.print("Method: ");
+  Serial.println(methodToString(HTTP.method()));
+  String fullUri = trimSlash(HTTP.uri());
+  Serial.print("requestedUri: ");
+  Serial.println(fullUri);
+
+  if (fullUri == "description.xml") {
+    descriptionHandler("", fullUri);
+    Serial.println(millis());
+    return;
+  }
+
+  // make sure /api is there, rip it off along with trailing slash if present
+  if (!fullUri.startsWith("api")) {
+    // bail, unimplemented
+    HTTP.send(404, "text/plain", "File not found");
+    Serial.println("FIXME: To be implemented");
+    return;
+  }
+  fullUri.remove(0, 3);
+  fullUri = trimSlash(fullUri);
+  // get user
+  String user;
+  int userEnd = fullUri.indexOf('/');
+  if (userEnd == -1) {
+    user = fullUri;
+    fullUri = "";
+  } else {
+    user = fullUri.substring(0, userEnd);
+    fullUri.remove(0, userEnd);
+  }
+  String requestedUri = trimSlash(fullUri);
+  if (requestedUri.endsWith("/")) {
+    requestedUri = requestedUri.substring(0, requestedUri.length() - 1);
+  }
+  // requestedUri is remaining path, no leading or trailing slash
+  Serial.print("URI: ");
+  Serial.println(requestedUri);
+
+  if ( requestedUri == "config" || (requestedUri == "" && user == "config") ) {
+    configHandler(user, requestedUri);
+  } else if (requestedUri == "") {
+    if (user == "") {
+      authHandler(user, requestedUri);
+    } else {
+      wholeConfigHandler(user, requestedUri);
+    }
+  } else if (requestedUri.startsWith("lights")) {
+    lightsHandler(user, requestedUri);
+  } else if (requestedUri.startsWith("groups")) {
+    groupsHandler(user, requestedUri);
+  } else if (requestedUri.startsWith("scenes")) {
+    scenesHandler(user, requestedUri);
+  } else {
     HTTP.send(404, "text/plain", "File not found");
     Serial.println("FIXME: To be implemented");
 
     // Print what the client has POSTed
     for (uint8_t i = 0; i < HTTP.args(); i++) Serial.printf("ARG[%u]: %s=%s\n", i, HTTP.argName(i).c_str(), HTTP.arg(i).c_str());
-
   }
   Serial.println(millis());
 }
