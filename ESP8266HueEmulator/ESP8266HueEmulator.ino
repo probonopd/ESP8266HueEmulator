@@ -10,7 +10,7 @@
 
 // these are only used in LightHandler.cpp, but it seems that the IDE only scans the .ino and real libraries for dependencies
 #include <ESP8266WebServer.h>
-#include <ESP8266SSDP.h>
+#include "SSDP.h"
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
 
 #include "/secrets.h" // Delete this line and populate the following
