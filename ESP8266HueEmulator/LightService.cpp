@@ -2,11 +2,12 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <WiFiUdp.h>
-#include <ESP8266SSDP.h>
+#include "SSDP.h"
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
 #include <NeoPixelBus.h> // NeoPixelAnimator branch
 
 String macString;
+String bridgeIDString;
 String ipString;
 String netmaskString;
 String gatewayString;
@@ -64,8 +65,59 @@ LightHandler *LightServiceClass::getLightHandler(int numberOfTheLight) {
 
 void handleAllOthers();
 
+static const char* _ssdp_response_template =
+  "HTTP/1.1 200 OK\r\n"
+  "EXT:\r\n"
+  "CACHE-CONTROL: max-age=%u\r\n" // SSDP_INTERVAL
+  "LOCATION: http://%u.%u.%u.%u:%u/%s\r\n" // WiFi.localIP(), _port, _schemaURL
+  "SERVER: Arduino/1.0 UPNP/1.1 %s/%s\r\n" // _modelName, _modelNumber
+  "hue-bridgeid: %s\r\n"
+  "ST: %s\r\n"  // _deviceType
+  "USN: uuid:%s\r\n" // _uuid
+  "\r\n";
+
+static const char* _ssdp_notify_template =
+  "NOTIFY * HTTP/1.1\r\n"
+  "HOST: 239.255.255.250:1900\r\n"
+  "NTS: ssdp:alive\r\n"
+  "CACHE-CONTROL: max-age=%u\r\n" // SSDP_INTERVAL
+  "LOCATION: http://%u.%u.%u.%u:%u/%s\r\n" // WiFi.localIP(), _port, _schemaURL
+  "SERVER: Arduino/1.0 UPNP/1.1 %s/%s\r\n" // _modelName, _modelNumber
+  "hue-bridgeid: %s\r\n"
+  "NT: %s\r\n"  // _deviceType
+  "USN: uuid:%s\r\n" // _uuid
+  "\r\n";
+
+int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
+                          bool isNotify, int interval, char *modelName,
+                          char *modelNumber, char *uuid, char *deviceType,
+                          uint32_t ip, uint16_t port, char *schemaURL) {
+  if (isNotify) {
+    return snprintf(buffer, buff_len,
+      _ssdp_notify_template,
+      interval,
+      IP2STR(&ip), port, schemaURL,
+      modelName, modelNumber,
+      bridgeIDString.c_str(),
+      deviceType,
+      uuid);
+  } else {
+    return snprintf(buffer, buff_len,
+      _ssdp_response_template,
+      interval,
+      IP2STR(&ip), port, schemaURL,
+      modelName, modelNumber,
+      "001788FFFE142F92",
+      deviceType,
+      uuid);
+  }
+}
+
 void LightServiceClass::begin() {
   macString = String(WiFi.macAddress());
+  bridgeIDString = macString;
+  bridgeIDString.replace(":", "");
+  bridgeIDString = "0017" + bridgeIDString;
   ipString = StringIPaddress(WiFi.localIP());
   netmaskString = StringIPaddress(WiFi.subnetMask());
   gatewayString = StringIPaddress(WiFi.gatewayIP());
@@ -92,6 +144,7 @@ void LightServiceClass::begin() {
   SSDP.setManufacturer((char*)"Royal Philips Electronics");
   SSDP.setManufacturerURL((char*)"http://www.philips.com");
   SSDP.setDeviceType((char*)"upnp:rootdevice");
+  SSDP.setMessageFormatCallback(ssdpMsgFormatCallback);
   Serial.println("SSDP Started");
 }
 
@@ -299,6 +352,7 @@ void addConfigJson(aJsonObject *root)
 {
   aJson.addStringToObject(root, "name", "hue emulator");
   aJson.addStringToObject(root, "swversion", "81012917");
+  aJson.addStringToObject(root, "bridgeid", bridgeIDString.c_str());
   aJson.addBooleanToObject(root, "portalservices", false);
   aJson.addBooleanToObject(root, "linkbutton", false);
   aJson.addStringToObject(root, "mac", macString.c_str());
