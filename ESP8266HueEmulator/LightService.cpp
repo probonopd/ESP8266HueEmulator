@@ -117,7 +117,7 @@ void LightServiceClass::begin() {
   macString = String(WiFi.macAddress());
   bridgeIDString = macString;
   bridgeIDString.replace(":", "");
-  bridgeIDString = "0017" + bridgeIDString;
+  bridgeIDString = bridgeIDString.substring(0, 6) + "FFFE" + bridgeIDString.substring(6);
   ipString = StringIPaddress(WiFi.localIP());
   netmaskString = StringIPaddress(WiFi.subnetMask());
   gatewayString = StringIPaddress(WiFi.gatewayIP());
@@ -354,7 +354,7 @@ void addConfigJson(aJsonObject *root)
   aJson.addStringToObject(root, "swversion", "81012917");
   aJson.addStringToObject(root, "bridgeid", bridgeIDString.c_str());
   aJson.addBooleanToObject(root, "portalservices", false);
-  aJson.addBooleanToObject(root, "linkbutton", false);
+  aJson.addBooleanToObject(root, "linkbutton", true);
   aJson.addStringToObject(root, "mac", macString.c_str());
   aJson.addBooleanToObject(root, "dhcp", true);
   aJson.addStringToObject(root, "ipaddress", ipString.c_str());
