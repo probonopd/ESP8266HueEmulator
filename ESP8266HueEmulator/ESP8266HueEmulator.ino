@@ -42,7 +42,7 @@ class PixelHandler : public LightHandler {
     HueLightInfo _info;
     int16_t colorloopIndex = -1;
   public:
-    void handleQuery(int lightNumber, HueLightInfo newInfo) {
+    void handleQuery(int lightNumber, HueLightInfo newInfo, aJsonObject* raw) {
       // define the effect to apply, in this case linear blend
       HslColor newColor = HslColor(getHsb(newInfo.hue, newInfo.saturation, newInfo.brightness));
       HslColor originalColor = strip.GetPixelColor(lightNumber);

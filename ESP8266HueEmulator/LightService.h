@@ -19,10 +19,13 @@ struct HueLightInfo {
   HueEffect effect = EFFECT_NONE;
 };
 
+class aJsonObject;
+bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLightInfo *newInfo);
+
 class LightHandler {
   public:
     // These functions include light number as a single LightHandler could conceivably service several lights
-    virtual void handleQuery(int lightNumber, HueLightInfo info) {}
+    virtual void handleQuery(int lightNumber, HueLightInfo info, aJsonObject* raw) {}
     virtual HueLightInfo getInfo(int lightNumber) {
       HueLightInfo info;
       return info;
