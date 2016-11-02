@@ -108,12 +108,12 @@ void setup() {
 
   // Show that the NeoPixels are alive
   delay(120); // Apparently needed to make the first few pixels animate correctly
-  infoLight(white);
-
   Serial.begin(115200);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
+  infoLight(white);
+
   if (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("WiFi Failed");
     // Show that we are connected
