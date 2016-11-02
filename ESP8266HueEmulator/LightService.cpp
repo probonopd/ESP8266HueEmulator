@@ -446,8 +446,8 @@ void lightsHandler(String user, String uri) {
         aJson.deleteItem(parsedRoot);
         return;
       }
+      handler->handleQuery(numberOfTheLight, newInfo, parsedRoot);
       aJson.deleteItem(parsedRoot);
-      handler->handleQuery(numberOfTheLight, newInfo);
     } else if (HTTP.arg("plain") != "") {
       // unparseable json
       sendError(2, "groups/0/action", "Bad JSON body in request");
@@ -481,7 +481,7 @@ void applyConfigToLightMask(unsigned int lights) {
       HueLightInfo currentInfo = handler->getInfo(i);
       HueLightInfo newInfo;
       if (parseHueLightInfo(currentInfo, parsedRoot, &newInfo)) {
-        handler->handleQuery(i, newInfo);
+        handler->handleQuery(i, newInfo, parsedRoot);
       }
     }
     aJson.deleteItem(parsedRoot);
