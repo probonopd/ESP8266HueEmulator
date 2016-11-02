@@ -42,7 +42,7 @@ class PixelHandler : public LightHandler {
     HueLightInfo _info;
     int16_t colorloopIndex = -1;
   public:
-    void handleQuery(int lightNumber, HueLightInfo newInfo) {
+    void handleQuery(int lightNumber, HueLightInfo newInfo, aJsonObject* raw) {
       // define the effect to apply, in this case linear blend
       HslColor newColor = HslColor(getHsb(newInfo.hue, newInfo.saturation, newInfo.brightness));
       HslColor originalColor = strip.GetPixelColor(lightNumber);
@@ -108,12 +108,12 @@ void setup() {
 
   // Show that the NeoPixels are alive
   delay(120); // Apparently needed to make the first few pixels animate correctly
-  infoLight(white);
-
   Serial.begin(115200);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
+  infoLight(white);
+
   if (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("WiFi Failed");
     // Show that we are connected
