@@ -638,7 +638,24 @@ void groupsHandler(String user, String uri) {
   if (uri == "") {
     switch (HTTP.method()) {
       case HTTP_GET:
-        sendJson(lightGroups[groupNum]->getJson());
+        if (groupNum != -1) {
+          sendJson(lightGroups[groupNum]->getJson());
+        } else {
+          aJsonObject *object = aJson.createObject();
+          aJson.addStringToObject(object, "name", "0");
+          aJsonObject *lightsArray = aJson.createArray();
+          aJson.addItemToObject(object, "lights", lightsArray);
+          for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
+            if (!lightHandlers[i]) {
+              continue;
+            }
+            // add light to list
+            String lightNum = "";
+            lightNum += (i + 1);
+            aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
+          }
+          sendJson(object);
+        }
         break;
       case HTTP_PUT:
         // validate body, delete old group, create new group
@@ -740,7 +757,7 @@ void handleAllOthers() {
   // make sure /api is there, rip it off along with trailing slash if present
   if (!fullUri.startsWith("api")) {
     // bail, unimplemented
-    HTTP.send(404, "text/plain", "File not found");
+    HTTP.send(200, "text/plain", "{}");
     Serial.println("FIXME: To be implemented");
     return;
   }
@@ -779,7 +796,7 @@ void handleAllOthers() {
   } else if (requestedUri.startsWith("scenes")) {
     scenesHandler(user, requestedUri);
   } else {
-    HTTP.send(404, "text/plain", "File not found");
+    HTTP.send(200, "text/plain", "()");
     Serial.println("FIXME: To be implemented");
 
     // Print what the client has POSTed
