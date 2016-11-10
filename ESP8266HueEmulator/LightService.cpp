@@ -337,7 +337,7 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHa
   aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
   aJson.addNumberToObject(state, "ct", 500); // ct mode: color temp (expressed in mireds range 154-500)
   aJson.addStringToObject(state, "alert", "none"); // 'select' flash the lamp once, 'lselect' repeat flash for 30s
-  aJson.addStringToObject(state, "effect", "none"); // 'colorloop' makes Hue cycle through colors
+  aJson.addStringToObject(state, "effect", info.effect == EFFECT_COLORLOOP ? "colorloop" : "none");
   aJson.addStringToObject(state, "colormode", "hs"); // the current color mode
   aJson.addBooleanToObject(state, "reachable", true); // lamp can be seen by the hub
 }
