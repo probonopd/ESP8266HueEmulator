@@ -176,8 +176,9 @@ void sendJson(aJsonObject *root)
 // Based on http://stackoverflow.com/questions/22564187/rgb-to-philips-hue-hsb
 // The code is based on this brilliant note: https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/commit/f41091cf671e13fe8c32fcced12604cd31cceaf3
 
-RgbColor getXYtoRGB(float x, float y, int brightness) {
-  float bright_y = ((float)brightness) / y;
+RgbColor getXYtoRGB(float x, float y, int brightness_raw) {
+  float brightness = ((float)brightness_raw) / 255.0f;
+  float bright_y = brightness / y;
   float X = x * bright_y;
   float Z = (1 - x - y) * bright_y;
 
@@ -190,9 +191,9 @@ RgbColor getXYtoRGB(float x, float y, int brightness) {
   float inv_gamma = 1.0 / 2.4;
   float linear_delta = 0.055;
   float linear_interval = 1 + linear_delta;
-  float r = R <= 0.0031308 ? 12.92 * R : (linear_interval) * pow(r, inv_gamma) - linear_delta;
-  float g = G <= 0.0031308 ? 12.92 * G : (linear_interval) * pow(g, inv_gamma) - linear_delta;
-  float b = B <= 0.0031308 ? 12.92 * B : (linear_interval) * pow(b, inv_gamma) - linear_delta;
+  float r = R <= 0.0031308 ? 12.92 * R : (linear_interval) * pow(R, inv_gamma) - linear_delta;
+  float g = G <= 0.0031308 ? 12.92 * G : (linear_interval) * pow(G, inv_gamma) - linear_delta;
+  float b = B <= 0.0031308 ? 12.92 * B : (linear_interval) * pow(B, inv_gamma) - linear_delta;
 
   return RgbColor(r * COLOR_SATURATION,
                   g * COLOR_SATURATION,
@@ -337,7 +338,7 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHa
   aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
   aJson.addNumberToObject(state, "ct", 500); // ct mode: color temp (expressed in mireds range 154-500)
   aJson.addStringToObject(state, "alert", "none"); // 'select' flash the lamp once, 'lselect' repeat flash for 30s
-  aJson.addStringToObject(state, "effect", "none"); // 'colorloop' makes Hue cycle through colors
+  aJson.addStringToObject(state, "effect", info.effect == EFFECT_COLORLOOP ? "colorloop" : "none");
   aJson.addStringToObject(state, "colormode", "hs"); // the current color mode
   aJson.addBooleanToObject(state, "reachable", true); // lamp can be seen by the hub
 }
@@ -638,7 +639,24 @@ void groupsHandler(String user, String uri) {
   if (uri == "") {
     switch (HTTP.method()) {
       case HTTP_GET:
-        sendJson(lightGroups[groupNum]->getJson());
+        if (groupNum != -1) {
+          sendJson(lightGroups[groupNum]->getJson());
+        } else {
+          aJsonObject *object = aJson.createObject();
+          aJson.addStringToObject(object, "name", "0");
+          aJsonObject *lightsArray = aJson.createArray();
+          aJson.addItemToObject(object, "lights", lightsArray);
+          for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
+            if (!lightHandlers[i]) {
+              continue;
+            }
+            // add light to list
+            String lightNum = "";
+            lightNum += (i + 1);
+            aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
+          }
+          sendJson(object);
+        }
         break;
       case HTTP_PUT:
         // validate body, delete old group, create new group
@@ -740,7 +758,7 @@ void handleAllOthers() {
   // make sure /api is there, rip it off along with trailing slash if present
   if (!fullUri.startsWith("api")) {
     // bail, unimplemented
-    HTTP.send(404, "text/plain", "File not found");
+    HTTP.send(200, "text/plain", "{}");
     Serial.println("FIXME: To be implemented");
     return;
   }
@@ -779,7 +797,7 @@ void handleAllOthers() {
   } else if (requestedUri.startsWith("scenes")) {
     scenesHandler(user, requestedUri);
   } else {
-    HTTP.send(404, "text/plain", "File not found");
+    HTTP.send(200, "text/plain", "()");
     Serial.println("FIXME: To be implemented");
 
     // Print what the client has POSTed
