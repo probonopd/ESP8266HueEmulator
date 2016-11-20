@@ -164,6 +164,8 @@ void setup() {
 }
 
 void loop() {
+  ArduinoOTA.handle();
+  
   LightService.update();
 
   static unsigned long update_strip_time = 0;  //  keeps track of pixel refresh rate... limits updates to 33 Hz
