@@ -248,6 +248,15 @@ void sendSuccess(String id, String value) {
   sendJson(search);
 }
 
+void sendSuccess(String value) {
+  aJsonObject *search = aJson.createArray();
+  aJsonObject *container = aJson.createObject();
+  aJson.addItemToArray(search, container);
+  aJsonObject *succeed = aJson.createObject();
+  aJson.addStringToObject(container, "success", value.c_str());
+  sendJson(search);
+}
+
 void sendUpdated() {
   HTTP.send(200, "text/plain", "Updated.");
 }
@@ -527,9 +536,33 @@ class LightGroup {
       }
       return object;
     }
+    aJsonObject *getSceneJson() {
+      aJsonObject *object = aJson.createObject();
+      aJson.addStringToObject(object, "name", name.c_str());
+      aJson.addStringToObject(object, "owner", "api");
+      aJson.addStringToObject(object, "picture", "");
+      aJson.addStringToObject(object, "lastupdated", "");
+      aJson.addBooleanToObject(object, "recycle", false);
+      aJson.addBooleanToObject(object, "locked", false);
+      aJson.addNumberToObject(object, "version", 2);
+      aJsonObject *lightsArray = aJson.createArray();
+      aJson.addItemToObject(object, "lights", lightsArray);
+      for (int i = 0; i < 16; i++) {
+        if (!((1 << i) & lights)) {
+          continue;
+        }
+        // add light to list
+        String lightNum = "";
+        lightNum += (i + 1);
+        aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
+      }
+      return object;
+    }
     unsigned int getLightMask() {
       return lights;
     }
+    // only used for scenes
+    String id;
   private:
     String name;
     // use unsigned int to hold members of this group. 2 bytes -> supports up to 16 lights
@@ -691,14 +724,159 @@ void groupsHandler(String user, String uri) {
   }
 }
 
-void scenesHandler(String user, String uri) {
-  uri = trimSlash(uri.substring(6));
-  if (uri == "" && HTTP.method() == HTTP_GET) {
-    HTTP.send(200, "text/plain", "{}");
+LightGroup *lightScenes[16] = {nullptr, };
+
+int findSceneIndex(String id) {
+  int index = -1;
+  for (int i = 0; i < 16; i++) {
+    LightGroup *scene = lightScenes[i];
+    if (scene) {
+      if (scene->id == id) {
+        return i;
+      }
+    } else if (index == -1) {
+      index = i;
+    }
+  }
+  return index;
+}
+
+bool updateSceneSlot(int slot, String id, String body) {
+  aJsonObject *root;
+  if (body != "") {
+    Serial.print("JSON Body:");
+    Serial.println(body);
+    root = validateGroupCreateBody(body);
+  }
+  if (!root && body != "") {
+    // throw error bad body
+    sendError(2, "scenes/" + (slot + 1), "Bad JSON body");
+    return true;
+  }
+  if (lightScenes[slot]) {
+    delete lightScenes[slot];
+    lightScenes[slot] = nullptr;
+  }
+  if (body != "") {
+    lightScenes[slot] = new LightGroup(root);
+    aJson.deleteItem(root);
+  }
+  return false;
+}
+
+void sceneCreationHandler(String id) {
+  int sceneIndex = findSceneIndex(id);
+  // handle scene creation
+  // find first available scene slot
+  if (sceneIndex == -1) {
+    // throw error no new scenes allowed
+    sendError(301, "scenes", "Scenes table full");
     return;
   }
-  // no part of /api/user/scenes is supported, so all methods are unsupported
-  sendError(4, "/api/" + user + "/" + uri, "Method not supported for scenes");
+  // updateSceneSlot sends failure messages
+  if (!updateSceneSlot(sceneIndex, id, HTTP.arg("plain"))) {
+    lightScenes[sceneIndex]->id = id;
+    sendSuccess("id", id);
+    return;
+  }
+}
+
+void sceneListingHandler() {
+  // iterate over groups and serialize
+  aJsonObject *root = aJson.createObject();
+  for (int i = 0; i < 16; i++) {
+    if (lightScenes[i]) {
+      aJson.addItemToObject(root, lightScenes[i]->id.c_str(), lightScenes[i]->getSceneJson());
+    }
+  }
+  sendJson(root);
+}
+
+LightGroup *findScene(String id) {
+  for (int i = 0; i < 16; i++) {
+    LightGroup *scene = lightScenes[i];
+    if (scene) {
+      if (scene->id == id) {
+        return scene;
+      }
+    }
+  }
+  return nullptr;
+}
+
+void scenesHandler(String user, String uri) {
+  uri = trimSlash(uri.substring(6));
+  if (uri == "") {
+    switch (HTTP.method()) {
+      case HTTP_GET:
+        sceneListingHandler();
+        break;
+      case HTTP_POST:
+        sceneCreationHandler("");
+        break;
+      default:
+        sendError(4, "/api/" + user + "/scenes", "Scene method not supported");
+        break;
+    }
+    return;
+  }
+
+  int nextSlash = uri.indexOf("/");
+  String sceneId;
+  if (nextSlash == -1) {
+    sceneId = uri;
+    uri = "";
+  } else {
+    sceneId = uri.substring(0, nextSlash);
+    uri = trimSlash(uri.substring(nextSlash));
+  }
+  LightGroup *scene = findScene(sceneId);
+
+  if (uri == "") {
+    switch (HTTP.method()) {
+      case HTTP_GET:
+        sendJson(scene->getSceneJson());
+        break;
+      case HTTP_PUT:
+        // validate body, delete old group, create new group
+        sceneCreationHandler(sceneId);
+	      // XXX not a valid response according to API
+        sendUpdated();
+        break;
+      case HTTP_DELETE: {
+        if (scene) {
+          updateSceneSlot(findSceneIndex(sceneId), sceneId, "");
+        } else {
+          sendError(3, "/scenes/"+sceneId, "Cannot delete scene that does not exist");
+        }
+        String message = "/scenes/";
+        message += sceneId;
+        message += " deleted";
+        sendSuccess(message);
+        break;
+      }
+      default: {
+        String path = "/api/";
+        path += user;
+        path += "/scenes";
+        sendError(4, path, "Scene method not supported");
+        break;
+      }
+    }
+    return;
+  }
+
+  if (uri.startsWith("lightstates/") || uri.startsWith("lights/")) {
+    uri = uri.substring(12);
+    if (HTTP.method() != HTTP_POST && HTTP.method() != HTTP_PUT) {
+      // error, only POST allowed
+      sendError(4, "/api/" + user + "/scenes/" + sceneId + "/lightstates", "Only PUT and POST supported for scenes/*/light*");
+      return;
+    }
+    // XXX Do something with this information...
+    // XXX not a valid response according to API
+    sendUpdated();
+  }
 }
 
 void wholeConfigHandler(String user, String uri) {
