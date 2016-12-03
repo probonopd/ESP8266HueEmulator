@@ -30,7 +30,7 @@ Please note that currently only the bare minimum to advertise the emulated Hue b
 Everything in one go:
 
 ```
-mkdir -p $HOMEArduino/libraries/
+mkdir -p $HOME/Arduino/libraries/
 cd $HOMEArduino/libraries/
 git clone --branch 2.1.4 https://github.com/Makuna/NeoPixelBus.git
 git clone https://github.com/interactive-matter/aJson.git
