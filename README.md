@@ -25,6 +25,22 @@ Please note that currently only the bare minimum to advertise the emulated Hue b
 * Implement more of the protocol
 * Contribute pull requests ;-)
 
+## Compilation
+
+Everything in one go:
+
+```
+mkdir -p $HOMEArduino/libraries/
+cd $HOMEArduino/libraries/
+git clone --branch 2.1.4 https://github.com/Makuna/NeoPixelBus.git
+git clone https://github.com/interactive-matter/aJson.git
+sed -i -e 's|#define PRINT_BUFFER_LEN 256|#define PRINT_BUFFER_LEN 4096|g'  aJson/aJSON.h
+cd -
+git clone https://github.com/probonopd/ESP8266HueEmulator.git
+sed -i -e 's|#include "/secrets.h"|//#include "/secrets.h"|g' ESP8266HueEmulator/ESP8266HueEmulator/ESP8266HueEmulator.ino
+sed -i -e 's|//const char|const char|g' ESP8266HueEmulator/ESP8266HueEmulator/ESP8266HueEmulator.ino
+```
+
 ## Credits
 
 * Philips for providing open Hue APIs that are not restricted for use on Philips-branded hardware (as far as I can see by looking at their liberal [Terms and Conditions of Use](https://github.com/probonopd/ESP8266HueEmulator/wiki/Discovery#terms-and-conditions-of-use))
