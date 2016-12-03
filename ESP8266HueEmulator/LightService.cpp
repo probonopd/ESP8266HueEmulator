@@ -775,6 +775,9 @@ void sceneCreationHandler(String id) {
   }
   // updateSceneSlot sends failure messages
   if (!updateSceneSlot(sceneIndex, id, HTTP.arg("plain"))) {
+    if (id == "") {
+      id = String(sceneIndex);
+    }
     lightScenes[sceneIndex]->id = id;
     sendSuccess("id", id);
     return;
