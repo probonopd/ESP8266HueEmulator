@@ -696,9 +696,14 @@ void groupsHandler(String user, String uri) {
         updateGroupSlot(groupNum, HTTP.arg("plain"));
         sendUpdated();
         break;
-      case HTTP_DELETE:
+      case HTTP_DELETE: {
         updateGroupSlot(groupNum, "");
+        String message = "/groups/";
+        message += (groupNum + 1);
+        message += " deleted";
+        sendSuccess(message);
         break;
+      }
       default:
         sendError(4, "/api/" + user + "/groups", "Group method not supported");
         break;
