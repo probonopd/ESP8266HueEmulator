@@ -852,7 +852,11 @@ void scenesHandler(String user, String uri) {
   if (uri == "") {
     switch (HTTP.method()) {
       case HTTP_GET:
-        sendJson(scene->getSceneJson());
+        if (scene) {
+          sendJson(scene->getSceneJson());
+        } else {
+          sendError(3, "/scenes/"+sceneId, "Cannot retrieve scene that does not exist");
+        }
         break;
       case HTTP_PUT:
         // validate body, delete old group, create new group
