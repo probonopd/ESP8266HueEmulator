@@ -25,7 +25,7 @@ License (MIT license):
   THE SOFTWARE.
 
 */
-#define LWIP_OPEN_SRC
+// #define LWIP_OPEN_SRC
 #include <functional>
 #include "SSDP.h"
 #include "WiFiUdp.h"
