@@ -375,7 +375,7 @@ void addConfigJson(aJsonObject *root)
   aJsonObject *whitelist;
   aJson.addItemToObject(root, "whitelist", whitelist = aJson.createObject());
   aJsonObject *whitelistFirstEntry;
-  aJson.addItemToObject(whitelist, client.c_str(), whitelistFirstEntry = aJson.createObject());
+  aJson.addItemToObject(whitelist, "api", whitelistFirstEntry = aJson.createObject());
   aJson.addStringToObject(whitelistFirstEntry, "name", "clientname#devicename");
   aJsonObject *swupdate;
   aJson.addItemToObject(root, "swupdate", swupdate = aJson.createObject());
