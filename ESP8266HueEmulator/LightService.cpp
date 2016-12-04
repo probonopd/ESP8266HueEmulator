@@ -915,6 +915,10 @@ void wholeConfigHandler(String user, String uri) {
   addLightsJson(lights);
   aJsonObject *schedules;
   aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
+  aJsonObject *sensors;
+  aJson.addItemToObject(root, "sensors", sensors = aJson.createObject());
+  aJsonObject *rules;
+  aJson.addItemToObject(root, "rules", rules = aJson.createObject());
   sendJson(root);
 }
 
@@ -993,6 +997,12 @@ void handleAllOthers() {
     groupsHandler(user, requestedUri);
   } else if (requestedUri.startsWith("scenes")) {
     scenesHandler(user, requestedUri);
+  } else if (requestedUri.startsWith("sensors")) {
+    HTTP.send(200, "text/plain", "{}");
+  } else if (requestedUri.startsWith("sechedules")) {
+    HTTP.send(200, "text/plain", "{}");
+  } else if (requestedUri.startsWith("rules")) {
+    HTTP.send(200, "text/plain", "{}");
   } else {
     HTTP.send(200, "text/plain", "()");
     Serial.println("FIXME: To be implemented");
