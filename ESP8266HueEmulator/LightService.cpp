@@ -335,6 +335,7 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHa
   aJson.addItemToObject(root, lightName.c_str(), light = aJson.createObject());
   aJson.addStringToObject(light, "type", "Extended color light"); // type of lamp (all "Extended colour light" for now)
   aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) (numberOfTheLight + 1)).c_str()); // // the name as set through the web UI or app
+  aJson.addStringToObject(light, "uniqueid",  ("AA:BB:CC:DD:EE:FF:00:11-" + (String) (numberOfTheLight + 1)).c_str());
   aJson.addStringToObject(light, "modelid", "LST001"); // the model number
   aJsonObject *state;
   aJson.addItemToObject(light, "state", state = aJson.createObject());
