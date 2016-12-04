@@ -619,7 +619,7 @@ void groupCreationHandler() {
   }
 }
 
-void groupListingHandler() {
+aJsonObject *getGroupJson() {
   // iterate over groups and serialize
   aJsonObject *root = aJson.createObject();
   for (int i = 0; i < 16; i++) {
@@ -629,7 +629,11 @@ void groupListingHandler() {
       aJson.addItemToObject(root, sIndex.c_str(), lightGroups[i]->getJson());
     }
   }
-  sendJson(root);
+  return root;
+}
+
+void groupListingHandler() {
+  sendJson(getGroupJson());
 }
 
 void groupsHandler(String user, String uri) {
@@ -790,7 +794,7 @@ void sceneCreationHandler(String id) {
   }
 }
 
-void sceneListingHandler() {
+aJsonObject *getSceneJson() {
   // iterate over groups and serialize
   aJsonObject *root = aJson.createObject();
   for (int i = 0; i < 16; i++) {
@@ -798,7 +802,11 @@ void sceneListingHandler() {
       aJson.addItemToObject(root, lightScenes[i]->id.c_str(), lightScenes[i]->getSceneJson());
     }
   }
-  sendJson(root);
+  return root;
+}
+
+void sceneListingHandler() {
+  sendJson(getSceneJson());
 }
 
 LightGroup *findScene(String id) {
@@ -892,11 +900,9 @@ void wholeConfigHandler(String user, String uri) {
   // Serial.println("Respond with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
   aJsonObject *root;
   root = aJson.createObject();
-  aJsonObject *groups;
   // the default group 0 is never listed
-  aJson.addItemToObject(root, "groups", groups = aJson.createObject());
-  aJsonObject *scenes;
-  aJson.addItemToObject(root, "scenes", scenes = aJson.createObject());
+  aJson.addItemToObject(root, "groups", getGroupJson());
+  aJson.addItemToObject(root, "scenes", getSceneJson());
   aJsonObject *config;
   aJson.addItemToObject(root, "config", config = aJson.createObject());
   addConfigJson(config);
