@@ -335,6 +335,7 @@ void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHa
   aJson.addItemToObject(root, lightName.c_str(), light = aJson.createObject());
   aJson.addStringToObject(light, "type", "Extended color light"); // type of lamp (all "Extended colour light" for now)
   aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) (numberOfTheLight + 1)).c_str()); // // the name as set through the web UI or app
+  aJson.addStringToObject(light, "uniqueid",  ("AA:BB:CC:DD:EE:FF:00:11-" + (String) (numberOfTheLight + 1)).c_str());
   aJson.addStringToObject(light, "modelid", "LST001"); // the model number
   aJsonObject *state;
   aJson.addItemToObject(light, "state", state = aJson.createObject());
@@ -374,7 +375,7 @@ void addConfigJson(aJsonObject *root)
   aJsonObject *whitelist;
   aJson.addItemToObject(root, "whitelist", whitelist = aJson.createObject());
   aJsonObject *whitelistFirstEntry;
-  aJson.addItemToObject(whitelist, client.c_str(), whitelistFirstEntry = aJson.createObject());
+  aJson.addItemToObject(whitelist, "api", whitelistFirstEntry = aJson.createObject());
   aJson.addStringToObject(whitelistFirstEntry, "name", "clientname#devicename");
   aJsonObject *swupdate;
   aJson.addItemToObject(root, "swupdate", swupdate = aJson.createObject());
@@ -618,7 +619,7 @@ void groupCreationHandler() {
   }
 }
 
-void groupListingHandler() {
+aJsonObject *getGroupJson() {
   // iterate over groups and serialize
   aJsonObject *root = aJson.createObject();
   for (int i = 0; i < 16; i++) {
@@ -628,7 +629,11 @@ void groupListingHandler() {
       aJson.addItemToObject(root, sIndex.c_str(), lightGroups[i]->getJson());
     }
   }
-  sendJson(root);
+  return root;
+}
+
+void groupListingHandler() {
+  sendJson(getGroupJson());
 }
 
 void groupsHandler(String user, String uri) {
@@ -789,7 +794,7 @@ void sceneCreationHandler(String id) {
   }
 }
 
-void sceneListingHandler() {
+aJsonObject *getSceneJson() {
   // iterate over groups and serialize
   aJsonObject *root = aJson.createObject();
   for (int i = 0; i < 16; i++) {
@@ -797,7 +802,11 @@ void sceneListingHandler() {
       aJson.addItemToObject(root, lightScenes[i]->id.c_str(), lightScenes[i]->getSceneJson());
     }
   }
-  sendJson(root);
+  return root;
+}
+
+void sceneListingHandler() {
+  sendJson(getSceneJson());
 }
 
 LightGroup *findScene(String id) {
@@ -843,7 +852,11 @@ void scenesHandler(String user, String uri) {
   if (uri == "") {
     switch (HTTP.method()) {
       case HTTP_GET:
-        sendJson(scene->getSceneJson());
+        if (scene) {
+          sendJson(scene->getSceneJson());
+        } else {
+          sendError(3, "/scenes/"+sceneId, "Cannot retrieve scene that does not exist");
+        }
         break;
       case HTTP_PUT:
         // validate body, delete old group, create new group
@@ -891,11 +904,9 @@ void wholeConfigHandler(String user, String uri) {
   // Serial.println("Respond with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
   aJsonObject *root;
   root = aJson.createObject();
-  aJsonObject *groups;
   // the default group 0 is never listed
-  aJson.addItemToObject(root, "groups", groups = aJson.createObject());
-  aJsonObject *scenes;
-  aJson.addItemToObject(root, "scenes", scenes = aJson.createObject());
+  aJson.addItemToObject(root, "groups", getGroupJson());
+  aJson.addItemToObject(root, "scenes", getSceneJson());
   aJsonObject *config;
   aJson.addItemToObject(root, "config", config = aJson.createObject());
   addConfigJson(config);
@@ -904,6 +915,10 @@ void wholeConfigHandler(String user, String uri) {
   addLightsJson(lights);
   aJsonObject *schedules;
   aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
+  aJsonObject *sensors;
+  aJson.addItemToObject(root, "sensors", sensors = aJson.createObject());
+  aJsonObject *rules;
+  aJson.addItemToObject(root, "rules", rules = aJson.createObject());
   sendJson(root);
 }
 
@@ -982,6 +997,12 @@ void handleAllOthers() {
     groupsHandler(user, requestedUri);
   } else if (requestedUri.startsWith("scenes")) {
     scenesHandler(user, requestedUri);
+  } else if (requestedUri.startsWith("sensors")) {
+    HTTP.send(200, "text/plain", "{}");
+  } else if (requestedUri.startsWith("sechedules")) {
+    HTTP.send(200, "text/plain", "{}");
+  } else if (requestedUri.startsWith("rules")) {
+    HTTP.send(200, "text/plain", "{}");
   } else {
     HTTP.send(200, "text/plain", "()");
     Serial.println("FIXME: To be implemented");
