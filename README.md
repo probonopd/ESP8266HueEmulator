@@ -31,7 +31,7 @@ Everything in one go:
 
 ```
 mkdir -p $HOME/Arduino/libraries/
-cd $HOMEArduino/libraries/
+cd $HOME/Arduino/libraries/
 git clone --branch 2.1.4 https://github.com/Makuna/NeoPixelBus.git
 git clone https://github.com/interactive-matter/aJson.git
 sed -i -e 's|#define PRINT_BUFFER_LEN 256|#define PRINT_BUFFER_LEN 4096|g'  aJson/aJSON.h
