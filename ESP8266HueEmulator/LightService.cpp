@@ -324,11 +324,24 @@ void unimpFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) 
 
 void addConfigJson(aJsonObject *config);
 void sendJson(aJsonObject *config);
+void sendUpdated();
+void sendError(int type, String path, String description);
 void configFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
-  aJsonObject *root;
-  root = aJson.createObject();
-  addConfigJson(root);
-  sendJson(root);
+  switch (method) {
+    case HTTP_GET: {
+      aJsonObject *root;
+      root = aJson.createObject();
+      addConfigJson(root);
+      sendJson(root);
+      break;
+    }
+    case HTTP_PUT:
+      sendUpdated();
+      break;
+    default:
+      sendError(4, requestUri, "Config method not supported");
+      break;
+  }
 }
 
 void sendSuccess(String name, String value);
@@ -365,7 +378,6 @@ void wholeConfigFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod me
 
 void sceneListingHandler();
 void sceneCreationHandler(String body);
-void sendError(int type, String path, String description);
 void scenesFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   switch (method) {
     case HTTP_GET:
@@ -380,16 +392,11 @@ void scenesFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method)
   }
 }
 
-void scenesAnyFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
-  sendError(4, requestUri, "Scene method not supported");
-}
-
 int findSceneIndex(String id);
 LightGroup *findScene(String id);
 bool updateSceneSlot(int slot, String id, String body);
 void sendSuccess(String text);
 void sceneCreationHandler(String sceneId);
-void sendUpdated();
 void scenesIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   String sceneId = handler->getWildCard(1);
   LightGroup *scene = findScene(sceneId);
@@ -423,10 +430,10 @@ void scenesIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod metho
 
 void scenesIdLightFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   switch (method) {
-    case HTTP_GET:
-    // XXX Do something with this information...
-    // XXX not a valid response according to API
-    sendUpdated();
+    case HTTP_PUT:
+      // XXX Do something with this information...
+      // XXX not a valid response according to API
+      sendUpdated();
       break;
     default:
       sendError(4, requestUri, "Scene method not supported");
@@ -620,10 +627,10 @@ void LightServiceClass::begin() {
   Serial.println(80);
 
   HTTP.on("/description.xml", HTTP_GET, descriptionFn);
-  on(configFn, "/api/*/config", HTTP_GET);
+  on(configFn, "/api/*/config", HTTP_ANY);
   on(configFn, "/api/config", HTTP_GET);
   on(wholeConfigFn, "/api/*", HTTP_GET);
-  on(authFn, "/api", HTTP_GET);
+  on(authFn, "/api", HTTP_POST);
   on(unimpFn, "/api/*/schedules", HTTP_GET);
   on(unimpFn, "/api/*/rules", HTTP_GET);
   on(unimpFn, "/api/*/sensors", HTTP_GET);
@@ -768,6 +775,7 @@ void sendSuccess(String value) {
 }
 
 void sendUpdated() {
+  Serial.println("Updated.");
   HTTP.send(200, "text/plain", "Updated.");
 }
 
