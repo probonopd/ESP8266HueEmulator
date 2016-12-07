@@ -74,7 +74,7 @@ String getWildCard(String requestUri, String wcUri, int n, char wildcard = '*') 
 
 class WcFnRequestHandler;
 
-typedef std::function<void(WcFnRequestHandler *handler, String requestUri)> HandlerFunction;
+typedef std::function<void(WcFnRequestHandler *handler, String requestUri, HTTPMethod method)> HandlerFunction;
 
 class WcFnRequestHandler : public RequestHandler {
 public:
@@ -129,7 +129,7 @@ public:
 
     bool handle(ESP8266WebServer& server, HTTPMethod requestMethod, String requestUri) override {
         currentReqUri = requestUri;
-        _fn(this, requestUri);
+        _fn(this, requestUri, requestMethod);
         currentReqUri = "";
         return true;
     }
@@ -318,7 +318,7 @@ void descriptionFn() {
   Serial.println(str);
 }
 
-void unimpFn(WcFnRequestHandler *handler, String requestUri) {
+void unimpFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   String str = "{}";
   HTTP.send(200, "text/plain", str);
   Serial.println(str);
@@ -326,7 +326,7 @@ void unimpFn(WcFnRequestHandler *handler, String requestUri) {
 
 void addConfigJson(aJsonObject *config);
 void sendJson(aJsonObject *config);
-void configFn(WcFnRequestHandler *handler, String requestUri) {
+void configFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   aJsonObject *root;
   root = aJson.createObject();
   addConfigJson(root);
@@ -334,7 +334,7 @@ void configFn(WcFnRequestHandler *handler, String requestUri) {
 }
 
 void sendSuccess(String name, String value);
-void authFn(WcFnRequestHandler *handler, String requestUri) {
+void authFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   // On the real bridge, the link button on the bridge must have been recently pressed for the command to execute successfully.
   // We try to execute successfully regardless of a button for now.
   sendSuccess("username", "api");
@@ -343,7 +343,7 @@ void authFn(WcFnRequestHandler *handler, String requestUri) {
 aJsonObject *getGroupJson();
 aJsonObject *getSceneJson();
 void addLightsJson(aJsonObject *config);
-void wholeConfigFn(WcFnRequestHandler *handler, String requestUri) {
+void wholeConfigFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   // Serial.println("Respond with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
   aJsonObject *root;
   root = aJson.createObject();
@@ -366,17 +366,23 @@ void wholeConfigFn(WcFnRequestHandler *handler, String requestUri) {
 }
 
 void sceneListingHandler();
-void scenesGetFn(WcFnRequestHandler *handler, String requestUri) {
-  sceneListingHandler();
-}
-
 void sceneCreationHandler(String body);
-void scenesPostFn(WcFnRequestHandler *handler, String requestUri) {
-  sceneCreationHandler("");
+void sendError(int type, String path, String description);
+void scenesFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  switch (method) {
+    case HTTP_GET:
+      sceneListingHandler();
+      break;
+    case HTTP_POST:
+      sceneCreationHandler("");
+      break;
+    default:
+      sendError(4, requestUri, "Scene method not supported");
+      break;
+  }
 }
 
-void sendError(int type, String path, String description);
-void scenesAnyFn(WcFnRequestHandler *handler, String requestUri) {
+void scenesAnyFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   sendError(4, requestUri, "Scene method not supported");
 }
 
@@ -384,41 +390,50 @@ int findSceneIndex(String id);
 LightGroup *findScene(String id);
 bool updateSceneSlot(int slot, String id, String body);
 void sendSuccess(String text);
-void scenesIdGetFn(WcFnRequestHandler *handler, String requestUri) {
-  String sceneId = handler->getWildCard(1);
-  LightGroup *scene = findScene(sceneId);
-  if (scene) {
-    sendJson(scene->getSceneJson());
-  } else {
-    sendError(3, "/scenes/"+sceneId, "Cannot retrieve scene that does not exist");
-  }
-}
-
 void sceneCreationHandler(String sceneId);
 void sendUpdated();
-void scenesIdPutFn(WcFnRequestHandler *handler, String requestUri) {
-  String sceneId = handler->getWildCard(1);
-  // validate body, delete old group, create new group
-  sceneCreationHandler(sceneId);
-  // XXX not a valid response according to API
-  sendUpdated();
-}
-
-void scenesIdDeleteFn(WcFnRequestHandler *handler, String requestUri) {
+void scenesIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   String sceneId = handler->getWildCard(1);
   LightGroup *scene = findScene(sceneId);
-  if (scene) {
-    updateSceneSlot(findSceneIndex(sceneId), sceneId, "");
-  } else {
-    sendError(3, requestUri, "Cannot delete scene that does not exist");
+  switch (method) {
+    case HTTP_GET:
+      if (scene) {
+        sendJson(scene->getSceneJson());
+      } else {
+        sendError(3, "/scenes/"+sceneId, "Cannot retrieve scene that does not exist");
+      }
+      break;
+    case HTTP_PUT:
+      // validate body, delete old group, create new group
+      sceneCreationHandler(sceneId);
+      // XXX not a valid response according to API
+      sendUpdated();
+      break;
+    case HTTP_DELETE:
+      if (scene) {
+        updateSceneSlot(findSceneIndex(sceneId), sceneId, "");
+      } else {
+        sendError(3, requestUri, "Cannot delete scene that does not exist");
+      }
+      sendSuccess(requestUri+" deleted");
+      break;
+    default:
+      sendError(4, requestUri, "Scene method not supported");
+      break;
   }
-  sendSuccess(requestUri+" deleted");
 }
 
-void scenesIdLightFn(WcFnRequestHandler *handler, String requestUri) {
-  // XXX Do something with this information...
-  // XXX not a valid response according to API
-  sendUpdated();
+void scenesIdLightFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  switch (method) {
+    case HTTP_GET:
+    // XXX Do something with this information...
+    // XXX not a valid response according to API
+    sendUpdated();
+      break;
+    default:
+      sendError(4, requestUri, "Scene method not supported");
+      break;
+  }
 }
 
 void LightServiceClass::begin() {
@@ -443,17 +458,10 @@ void LightServiceClass::begin() {
   on(unimpFn, "/api/*/schedules", HTTP_GET);
   on(unimpFn, "/api/*/rules", HTTP_GET);
   on(unimpFn, "/api/*/sensors", HTTP_GET);
-  on(scenesGetFn, "/api/*/scenes", HTTP_GET);
-  on(scenesPostFn, "/api/*/scenes", HTTP_POST);
-  on(scenesAnyFn, "/api/*/scenes", HTTP_ANY);
-  on(scenesIdGetFn, "/api/*/scenes/*", HTTP_GET);
-  on(scenesIdPutFn, "/api/*/scenes/*", HTTP_PUT);
-  on(scenesIdDeleteFn, "/api/*/scenes/*", HTTP_DELETE);
-  on(scenesAnyFn, "/api/*/scenes/*", HTTP_ANY);
-  on(scenesIdLightFn, "/api/*/scenes/*/lightstates/*", HTTP_PUT);
-  on(scenesAnyFn, "/api/*/scenes/*/lightstates/*", HTTP_ANY);
-  on(scenesIdLightFn, "/api/*/scenes/*/lights/*/state", HTTP_PUT);
-  on(scenesAnyFn, "/api/*/scenes/*/lights/*/state", HTTP_ANY);
+  on(scenesFn, "/api/*/scenes", HTTP_ANY);
+  on(scenesIdFn, "/api/*/scenes/*", HTTP_ANY);
+  on(scenesIdLightFn, "/api/*/scenes/*/lightstates/*", HTTP_ANY);
+  on(scenesIdLightFn, "/api/*/scenes/*/lights/*/state", HTTP_ANY);
   HTTP.onNotFound(handleAllOthers);
 
   HTTP.begin();
