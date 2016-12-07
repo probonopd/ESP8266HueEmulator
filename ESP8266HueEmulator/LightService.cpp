@@ -192,8 +192,6 @@ LightHandler *LightServiceClass::getLightHandler(int numberOfTheLight) {
   return lightHandlers[numberOfTheLight];
 }
 
-void handleAllOthers();
-
 static const char* _ssdp_response_template =
   "HTTP/1.1 200 OK\r\n"
   "EXT:\r\n"
@@ -526,6 +524,87 @@ void groupsIdActionFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod
   applyConfigToLightMask(lightMask);
 }
 
+void lightsFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  switch (method) {
+    case HTTP_GET: {
+      // dump existing lights
+      aJsonObject *lights = aJson.createObject();
+      addLightsJson(lights);
+      sendJson(lights);
+      break;
+    }
+    case HTTP_POST:
+      // "start" a "search" for "new" lights
+      sendSuccess("/lights", "Searching for new devices");
+      break;
+    default:
+      sendError(4, requestUri, "Light method not supported");
+      break;
+  }
+}
+
+void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler);
+void lightsIdFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod method) {
+  int numberOfTheLight = atoi(whandler->getWildCard(1).c_str()) - 1;
+  LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
+  switch (method) {
+    case HTTP_GET: {
+      aJsonObject *root;
+      root = aJson.createObject();
+      addLightJson(root, numberOfTheLight, handler);
+      sendJson(root);
+      break;
+    }
+    case HTTP_PUT:
+      // XXX do something here
+      sendUpdated();
+      break;
+    default:
+      sendError(4, requestUri, "Light method not supported");
+      break;
+  }
+}
+
+void lightsIdStateFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod method) {
+  int numberOfTheLight = atoi(whandler->getWildCard(1).c_str()) - 1;
+  LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
+  if (!handler) {
+    sendError(3, requestUri, "Requested light not available");
+    return;
+  }
+
+  switch (method) {
+    case HTTP_PUT: {
+      Serial.print("JSON Body:");
+      Serial.println(HTTP.arg("plain"));
+      aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
+      if (!parsedRoot) {
+        // unparseable json
+        sendError(2, requestUri, "Bad JSON body in request");
+        return;
+      }
+      HueLightInfo currentInfo = handler->getInfo(numberOfTheLight);
+      HueLightInfo newInfo;
+      if (!parseHueLightInfo(currentInfo, parsedRoot, &newInfo)) {
+        aJson.deleteItem(parsedRoot);
+        return;
+      }
+      handler->handleQuery(numberOfTheLight, newInfo, parsedRoot);
+      aJson.deleteItem(parsedRoot);
+      break;
+    }
+    default:
+      sendError(4, requestUri, "Light method not supported");
+      break;
+  }
+}
+
+void lightsNewFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  // dump empty object
+  aJsonObject *lights = aJson.createObject();
+  sendJson(lights);
+}
+
 void LightServiceClass::begin() {
   macString = String(WiFi.macAddress());
   bridgeIDString = macString;
@@ -555,7 +634,10 @@ void LightServiceClass::begin() {
   on(groupsFn, "/api/*/groups", HTTP_ANY);
   on(groupsIdFn, "/api/*/groups/*", HTTP_ANY);
   on(groupsIdActionFn, "/api/*/groups/*/action", HTTP_ANY);
-  HTTP.onNotFound(handleAllOthers);
+  on(lightsFn, "/api/*/lights", HTTP_ANY);
+  on(lightsNewFn, "/api/*/lights/new", HTTP_ANY);
+  on(lightsIdFn, "/api/*/lights/*", HTTP_ANY);
+  on(lightsIdStateFn, "/api/*/lights/*/state", HTTP_ANY);
 
   HTTP.begin();
 
@@ -818,68 +900,6 @@ String trimSlash(String uri) {
     uri.remove(0, 1);
   }
   return uri;
-}
-
-void lightsHandler(String user, String uri) {
-  uri = trimSlash(uri.substring(6));
-  if (uri == "") {
-    switch (HTTP.method()) {
-      case HTTP_GET: {
-          // dump existing lights
-          aJsonObject *lights = aJson.createObject();
-          addLightsJson(lights);
-          sendJson(lights);
-          break;
-        }
-      case HTTP_POST: {
-          // "start" a "search" for "new" lights
-          sendSuccess("/lights", "Searching for new devices");
-          break;
-        }
-    }
-    return;
-  }
-  if (uri == "new") {
-    // dump empty object
-    aJsonObject *lights = aJson.createObject();
-    sendJson(lights);
-    return;
-  }
-
-  // individual light state request
-  if (uri.endsWith("state")) {
-    // remove "/state"
-    String lightText = uri.substring(0, uri.length() - 6);
-    int numberOfTheLight = atoi(lightText.c_str()) - 1;
-
-    Serial.print("JSON Body:");
-    Serial.println(HTTP.arg("plain"));
-    aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
-    LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
-    if (!handler) {
-      sendError(3, uri, "Requested light not available");
-      return;
-    }
-    HueLightInfo currentInfo = handler->getInfo(numberOfTheLight);
-    if (parsedRoot) {
-      HueLightInfo newInfo;
-      if (!parseHueLightInfo(currentInfo, parsedRoot, &newInfo)) {
-        aJson.deleteItem(parsedRoot);
-        return;
-      }
-      handler->handleQuery(numberOfTheLight, newInfo, parsedRoot);
-      aJson.deleteItem(parsedRoot);
-    } else if (HTTP.arg("plain") != "") {
-      // unparseable json
-      sendError(2, "groups/0/action", "Bad JSON body in request");
-      return;
-    }
-
-    aJsonObject *root;
-    root = aJson.createObject();
-    addLightJson(root, numberOfTheLight, handler);
-    sendJson(root);
-  }
 }
 
 aJsonObject *validateGroupCreateBody(String body) {
@@ -1183,53 +1203,5 @@ String methodToString(int method) {
     case HTTP_OPTIONS: return "OPTIONS";
     default: return "unknown";
   }
-}
-
-void handleAllOthers() {
-  Serial.print("=== ");
-  Serial.println(millis());
-  Serial.print("Method: ");
-  Serial.println(methodToString(HTTP.method()));
-  String fullUri = trimSlash(HTTP.uri());
-  Serial.print("requestedUri: ");
-  Serial.println(fullUri);
-
-  // make sure /api is there, rip it off along with trailing slash if present
-  if (!fullUri.startsWith("api")) {
-    // bail, unimplemented
-    HTTP.send(200, "text/plain", "{}");
-    Serial.println("FIXME: To be implemented");
-    return;
-  }
-  fullUri.remove(0, 3);
-  fullUri = trimSlash(fullUri);
-  // get user
-  String user;
-  int userEnd = fullUri.indexOf('/');
-  if (userEnd == -1) {
-    user = fullUri;
-    fullUri = "";
-  } else {
-    user = fullUri.substring(0, userEnd);
-    fullUri.remove(0, userEnd);
-  }
-  String requestedUri = trimSlash(fullUri);
-  if (requestedUri.endsWith("/")) {
-    requestedUri = requestedUri.substring(0, requestedUri.length() - 1);
-  }
-  // requestedUri is remaining path, no leading or trailing slash
-  Serial.print("URI: ");
-  Serial.println(requestedUri);
-
-  if (requestedUri.startsWith("lights")) {
-    lightsHandler(user, requestedUri);
-  } else {
-    HTTP.send(200, "text/plain", "()");
-    Serial.println("FIXME: To be implemented");
-
-    // Print what the client has POSTed
-    for (uint8_t i = 0; i < HTTP.args(); i++) Serial.printf("ARG[%u]: %s=%s\n", i, HTTP.argName(i).c_str(), HTTP.arg(i).c_str());
-  }
-  Serial.println(millis());
 }
 
