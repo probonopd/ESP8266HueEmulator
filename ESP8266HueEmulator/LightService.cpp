@@ -436,6 +436,96 @@ void scenesIdLightFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod 
   }
 }
 
+void groupListingHandler();
+void groupCreationHandler();
+void groupsFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  switch (method) {
+    case HTTP_GET:
+      groupListingHandler();
+      break;
+    case HTTP_POST:
+      groupCreationHandler();
+      break;
+    default:
+      sendError(4, requestUri, "Group method not supported");
+      break;
+  }
+}
+
+LightGroup *lightGroups[16] = {nullptr, };
+void groupCreationHandler(String sceneId);
+bool updateGroupSlot(int slot, String body);
+void groupsIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  String groupNumText = handler->getWildCard(1);
+  int groupNum = atoi(groupNumText.c_str()) - 1;
+  if ((groupNum == -1 && groupNumText != "0") || groupNum >= 16 || (groupNum >= 0 && !lightGroups[groupNum])) {
+    // error, invalid group number
+    sendError(3, requestUri, "Invalid group number");
+    return;
+  }
+
+  switch (method) {
+    case HTTP_GET:
+      if (groupNum != -1) {
+        sendJson(lightGroups[groupNum]->getJson());
+      } else {
+        aJsonObject *object = aJson.createObject();
+        aJson.addStringToObject(object, "name", "0");
+        aJsonObject *lightsArray = aJson.createArray();
+        aJson.addItemToObject(object, "lights", lightsArray);
+        for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
+          if (!lightHandlers[i]) {
+            continue;
+          }
+          // add light to list
+          String lightNum = "";
+          lightNum += (i + 1);
+          aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
+        }
+        sendJson(object);
+      }
+      break;
+    case HTTP_PUT:
+      // validate body, delete old group, create new group
+      updateGroupSlot(groupNum, HTTP.arg("plain"));
+      sendUpdated();
+      break;
+    case HTTP_DELETE:
+      updateGroupSlot(groupNum, "");
+      sendSuccess(requestUri+" deleted");
+      break;
+    default:
+      sendError(4, requestUri, "Group method not supported");
+      break;
+  }
+}
+
+void applyConfigToLightMask(unsigned int lights);
+void groupsIdActionFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  if (method != HTTP_PUT) {
+    // error, only PUT allowed
+    sendError(4, requestUri, "Only PUT supported for groups/*/action");
+    return;
+  }
+
+  String groupNumText = handler->getWildCard(1);
+  int groupNum = atoi(groupNumText.c_str()) - 1;
+  if ((groupNum == -1 && groupNumText != "0") || groupNum >= 16 || (groupNum >= 0 && !lightGroups[groupNum])) {
+    // error, invalid group number
+    sendError(3, requestUri, "Invalid group number");
+    return;
+  }
+  // parse input as if for all lights
+  unsigned int lightMask;
+  if (groupNum == -1) {
+    lightMask == 0xFFFF;
+  } else {
+    lightMask = lightGroups[groupNum]->getLightMask();
+  }
+  // apply to group
+  applyConfigToLightMask(lightMask);
+}
+
 void LightServiceClass::begin() {
   macString = String(WiFi.macAddress());
   bridgeIDString = macString;
@@ -462,6 +552,9 @@ void LightServiceClass::begin() {
   on(scenesIdFn, "/api/*/scenes/*", HTTP_ANY);
   on(scenesIdLightFn, "/api/*/scenes/*/lightstates/*", HTTP_ANY);
   on(scenesIdLightFn, "/api/*/scenes/*/lights/*/state", HTTP_ANY);
+  on(groupsFn, "/api/*/groups", HTTP_ANY);
+  on(groupsIdFn, "/api/*/groups/*", HTTP_ANY);
+  on(groupsIdActionFn, "/api/*/groups/*/action", HTTP_ANY);
   HTTP.onNotFound(handleAllOthers);
 
   HTTP.begin();
@@ -822,8 +915,6 @@ void applyConfigToLightMask(unsigned int lights) {
   }
 }
 
-LightGroup *lightGroups[16] = {nullptr, };
-
 // returns true on failure
 bool updateGroupSlot(int slot, String body) {
   aJsonObject *root;
@@ -885,104 +976,6 @@ aJsonObject *getGroupJson() {
 
 void groupListingHandler() {
   sendJson(getGroupJson());
-}
-
-void groupsHandler(String user, String uri) {
-  uri = trimSlash(uri.substring(6));
-  if (uri == "") {
-    switch (HTTP.method()) {
-      case HTTP_GET:
-        groupListingHandler();
-        break;
-      case HTTP_POST:
-        groupCreationHandler();
-        break;
-      default:
-        sendError(4, "/api/" + user + "/groups", "Group method not supported");
-        break;
-    }
-    return;
-  }
-
-  int nextSlash = uri.indexOf("/");
-  int groupNum = -1;
-  String groupNumText;
-  if (nextSlash == -1) {
-    groupNumText = uri;
-    uri = "";
-  } else {
-    groupNumText = uri.substring(0, nextSlash);
-    uri = trimSlash(uri.substring(nextSlash));
-  }
-  groupNum = atoi(groupNumText.c_str()) - 1;
-  if ((groupNum == -1 && groupNumText != "0") || groupNum >= 16 || (groupNum >= 0 && !lightGroups[groupNum])) {
-    // error, invalid group number
-    String resource = "/api/";
-    resource += user;
-    resource += "/groups/";
-    resource += groupNumText;
-    sendError(3, resource, "Invalid group number");
-    return;
-  }
-
-  if (uri == "") {
-    switch (HTTP.method()) {
-      case HTTP_GET:
-        if (groupNum != -1) {
-          sendJson(lightGroups[groupNum]->getJson());
-        } else {
-          aJsonObject *object = aJson.createObject();
-          aJson.addStringToObject(object, "name", "0");
-          aJsonObject *lightsArray = aJson.createArray();
-          aJson.addItemToObject(object, "lights", lightsArray);
-          for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
-            if (!lightHandlers[i]) {
-              continue;
-            }
-            // add light to list
-            String lightNum = "";
-            lightNum += (i + 1);
-            aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
-          }
-          sendJson(object);
-        }
-        break;
-      case HTTP_PUT:
-        // validate body, delete old group, create new group
-        updateGroupSlot(groupNum, HTTP.arg("plain"));
-        sendUpdated();
-        break;
-      case HTTP_DELETE: {
-        updateGroupSlot(groupNum, "");
-        String message = "/groups/";
-        message += (groupNum + 1);
-        message += " deleted";
-        sendSuccess(message);
-        break;
-      }
-      default:
-        sendError(4, "/api/" + user + "/groups", "Group method not supported");
-        break;
-    }
-    return;
-  }
-
-  if (uri == "action") {
-    if (HTTP.method() != HTTP_PUT) {
-      // error, only PUT allowed
-      sendError(4, "/api/" + user + "/groups/" + groupNum + "/action", "Only PUT supported for groups/*/action");
-      return;
-    }
-    // parse input as if for all lights
-    unsigned int lightMask;
-    if (groupNum == -1) {
-      lightMask == 0xFFFF;
-    } else {
-      lightMask = lightGroups[groupNum]->getLightMask();
-    }
-    // apply to group
-    applyConfigToLightMask(lightMask);
-  }
 }
 
 LightGroup *lightScenes[16] = {nullptr, };
@@ -1230,8 +1223,6 @@ void handleAllOthers() {
 
   if (requestedUri.startsWith("lights")) {
     lightsHandler(user, requestedUri);
-  } else if (requestedUri.startsWith("groups")) {
-    groupsHandler(user, requestedUri);
   } else {
     HTTP.send(200, "text/plain", "()");
     Serial.println("FIXME: To be implemented");
