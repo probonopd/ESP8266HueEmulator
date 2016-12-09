@@ -15,7 +15,7 @@ String gatewayString;
 // The username of the client (currently we authorize all clients simulating a pressed button on the bridge)
 String client;
 
-ESP8266WebServer HTTP(80);
+ESP8266WebServer *HTTP;
 
 String removeSlashes(String uri) {
   if (uri[0] == '/') {
@@ -307,18 +307,18 @@ class LightGroup {
 };
 
 void on(HandlerFunction fn, const String &wcUri, HTTPMethod method, char wildcard = '*') {
-  HTTP.addHandler(new WcFnRequestHandler(fn, wcUri, method, wildcard));
+  HTTP->addHandler(new WcFnRequestHandler(fn, wcUri, method, wildcard));
 }
 
 void descriptionFn() {
   String str = "<root><specVersion><major>1</major><minor>0</minor></specVersion><URLBase>http://" + ipString + ":80/</URLBase><device><deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType><friendlyName>Philips hue (" + ipString + ")</friendlyName><manufacturer>Royal Philips Electronics</manufacturer><manufacturerURL>http://www.philips.com</manufacturerURL><modelDescription>Philips hue Personal Wireless Lighting</modelDescription><modelName>Philips hue bridge 2012</modelName><modelNumber>929000226503</modelNumber><modelURL>http://www.meethue.com</modelURL><serialNumber>00178817122c</serialNumber><UDN>uuid:2f402f80-da50-11e1-9b23-00178817122c</UDN><presentationURL>index.html</presentationURL><iconList><icon><mimetype>image/png</mimetype><height>48</height><width>48</width><depth>24</depth><url>hue_logo_0.png</url></icon><icon><mimetype>image/png</mimetype><height>120</height><width>120</width><depth>24</depth><url>hue_logo_3.png</url></icon></iconList></device></root>";
-  HTTP.send(200, "text/plain", str);
+  HTTP->send(200, "text/plain", str);
   Serial.println(str);
 }
 
 void unimpFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   String str = "{}";
-  HTTP.send(200, "text/plain", str);
+  HTTP->send(200, "text/plain", str);
   Serial.println(str);
 }
 
@@ -492,7 +492,7 @@ void groupsIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod metho
       break;
     case HTTP_PUT:
       // validate body, delete old group, create new group
-      updateGroupSlot(groupNum, HTTP.arg("plain"));
+      updateGroupSlot(groupNum, HTTP->arg("plain"));
       sendUpdated();
       break;
     case HTTP_DELETE:
@@ -583,8 +583,8 @@ void lightsIdStateFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod
   switch (method) {
     case HTTP_PUT: {
       Serial.print("JSON Body:");
-      Serial.println(HTTP.arg("plain"));
-      aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
+      Serial.println(HTTP->arg("plain"));
+      aJsonObject* parsedRoot = aJson.parse(( char*) HTTP->arg("plain").c_str());
       if (!parsedRoot) {
         // unparseable json
         sendError(2, requestUri, "Bad JSON body in request");
@@ -613,6 +613,10 @@ void lightsNewFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod meth
 }
 
 void LightServiceClass::begin() {
+  begin(new ESP8266WebServer(80));
+}
+void LightServiceClass::begin(ESP8266WebServer *svr) {
+  HTTP = svr;
   macString = String(WiFi.macAddress());
   bridgeIDString = macString;
   bridgeIDString.replace(":", "");
@@ -626,7 +630,7 @@ void LightServiceClass::begin() {
   Serial.print(":");
   Serial.println(80);
 
-  HTTP.on("/description.xml", HTTP_GET, descriptionFn);
+  HTTP->on("/description.xml", HTTP_GET, descriptionFn);
   on(configFn, "/api/*/config", HTTP_ANY);
   on(configFn, "/api/config", HTTP_GET);
   on(wholeConfigFn, "/api/*", HTTP_GET);
@@ -646,7 +650,7 @@ void LightServiceClass::begin() {
   on(lightsIdFn, "/api/*/lights/*", HTTP_ANY);
   on(lightsIdStateFn, "/api/*/lights/*/state", HTTP_ANY);
 
-  HTTP.begin();
+  HTTP->begin();
 
   Serial.println("Starting SSDP...");
   SSDP.begin();
@@ -666,7 +670,7 @@ void LightServiceClass::begin() {
 }
 
 void LightServiceClass::update() {
-  HTTP.handleClient();
+  HTTP->handleClient();
 }
 
 void sendJson(aJsonObject *root)
@@ -677,7 +681,7 @@ void sendJson(aJsonObject *root)
   aJson.deleteItem(root);
   Serial.println(millis());
   Serial.println(msgStr);
-  HTTP.send(200, "text/plain", msgStr);
+  HTTP->send(200, "text/plain", msgStr);
   free(msgStr);
 }
 
@@ -776,7 +780,7 @@ void sendSuccess(String value) {
 
 void sendUpdated() {
   Serial.println("Updated.");
-  HTTP.send(200, "text/plain", "Updated.");
+  HTTP->send(200, "text/plain", "Updated.");
 }
 
 bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLightInfo *newInfo) {
@@ -922,8 +926,8 @@ aJsonObject *validateGroupCreateBody(String body) {
 
 void applyConfigToLightMask(unsigned int lights) {
   Serial.print("JSON Body:");
-  Serial.println(HTTP.arg("plain"));
-  aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
+  Serial.println(HTTP->arg("plain"));
+  aJsonObject* parsedRoot = aJson.parse(( char*) HTTP->arg("plain").c_str());
   if (parsedRoot) {
     for (int i = 0; i < LightService.getLightsAvailable(); i++) {
       LightHandler *handler = LightService.getLightHandler(i);
@@ -937,7 +941,7 @@ void applyConfigToLightMask(unsigned int lights) {
 
     // As per the spec, the response can be "Updated." for memory-constrained devices
     sendUpdated();
-  } else if (HTTP.arg("plain") != "") {
+  } else if (HTTP->arg("plain") != "") {
     // unparseable json
     sendError(2, "groups/0/action", "Bad JSON body in request");
   }
@@ -982,7 +986,7 @@ void groupCreationHandler() {
     sendError(301, "groups", "Groups table full");
     return;
   }
-  if (!updateGroupSlot(availableSlot, HTTP.arg("plain"))) {
+  if (!updateGroupSlot(availableSlot, HTTP->arg("plain"))) {
     String slot = "";
     slot += (availableSlot + 1);
     sendSuccess("id", slot);
@@ -1056,7 +1060,7 @@ void sceneCreationHandler(String id) {
     return;
   }
   // updateSceneSlot sends failure messages
-  if (!updateSceneSlot(sceneIndex, id, HTTP.arg("plain"))) {
+  if (!updateSceneSlot(sceneIndex, id, HTTP->arg("plain"))) {
     if (id == "") {
       id = String(sceneIndex);
     }
