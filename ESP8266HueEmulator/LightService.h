@@ -36,6 +36,7 @@ class LightHandler {
 #define MAX_LIGHT_HANDLERS 6
 #define COLOR_SATURATION 254
 
+class ESP8266WebServer;
 class LightServiceClass {
     public:
       LightHandler *getLightHandler(int numberOfTheLight);
@@ -43,6 +44,7 @@ class LightServiceClass {
       int getLightsAvailable();
       bool setLightHandler(int index, LightHandler *handler);
       void begin();
+      void begin(ESP8266WebServer *svr);
       void update();
     private:
       int currentNumLights = MAX_LIGHT_HANDLERS;

@@ -5,18 +5,147 @@
 #include "SSDP.h"
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
 #include <NeoPixelBus.h> // NeoPixelAnimator branch
+#include <assert.h>
 
 String macString;
 String bridgeIDString;
 String ipString;
 String netmaskString;
 String gatewayString;
-// Determines whether a client is already authorized
-bool isAuthorized = false;
 // The username of the client (currently we authorize all clients simulating a pressed button on the bridge)
 String client;
 
-ESP8266WebServer HTTP(80);
+ESP8266WebServer *HTTP;
+
+String removeSlashes(String uri) {
+  if (uri[0] == '/') {
+    uri = uri.substring(1);
+  }
+  if (uri.length() && uri[uri.length() - 1] == '/') {
+    uri = uri.substring(0, uri.length() - 1);
+  }
+  return uri;
+}
+
+String getPathSegment(String uri) {
+  // assume slashes removed
+  int slash = uri.indexOf("/");
+  if (slash == -1) {
+    return uri;
+  }
+  return uri.substring(0, slash);
+}
+
+String removePathSegment(String uri) {
+  // assume slashes removed
+  int slash = uri.indexOf("/");
+  if (slash == -1) {
+    return "";
+  }
+  return uri.substring(slash);
+}
+
+String getWildCard(String requestUri, String wcUri, int n, char wildcard = '*') {
+  wcUri = removeSlashes(wcUri);
+  requestUri = removeSlashes(requestUri);
+  String wildcardStr;
+  wildcardStr += wildcard;
+  int i = 0;
+  while (1) {
+    String uPath = getPathSegment(wcUri);
+    String ruPath = getPathSegment(requestUri);
+    if (uPath == wildcardStr) {
+      if (i == n) {
+        return ruPath;
+      }
+      i++;
+    }
+    wcUri = removeSlashes(removePathSegment(wcUri));
+    requestUri = removeSlashes(removePathSegment(requestUri));
+    if (!wcUri.length() && !requestUri.length()) {
+      return "";
+    }
+    if (!wcUri.length() || !requestUri.length()) {
+      return "";
+    }
+  }
+  return "";
+}
+
+class WcFnRequestHandler;
+
+typedef std::function<void(WcFnRequestHandler *handler, String requestUri, HTTPMethod method)> HandlerFunction;
+
+class WcFnRequestHandler : public RequestHandler {
+public:
+    WcFnRequestHandler(HandlerFunction fn, const String &uri, HTTPMethod method, char wildcard = '*')
+    : _fn(fn)
+    , _uri(uri)
+    , _method(method)
+    , _wildcard(wildcard)
+    {
+      assert(_wildcard != '/');
+      // verify that the URI is reasonable (only contains wildcard at the beginning/end/whole path segments
+      for(int i = 0; i < _uri.length(); i++) {
+        if (_uri[i] == _wildcard) {
+          if (i != 0 && i != _uri.length() - 1 && (_uri[i-1] != '/' || _uri[i+1] != '/')) {
+            assert(false);
+          }
+        }
+      }
+    }
+
+    bool canHandle(HTTPMethod requestMethod, String requestUri) override  {
+        if (_method != HTTP_ANY && _method != requestMethod) {
+          return false;
+        }
+
+        String uri = removeSlashes(_uri);
+        requestUri = removeSlashes(requestUri);
+        String wildcardStr;
+        wildcardStr += _wildcard;
+        while (1) {
+          String uPath = getPathSegment(uri);
+          String ruPath = getPathSegment(requestUri);
+          if (uPath != ruPath && uPath != wildcardStr) {
+            return false;
+          }
+          uri = removeSlashes(removePathSegment(uri));
+          requestUri = removeSlashes(removePathSegment(requestUri));
+          if (!uri.length() && !requestUri.length()) {
+            return true;
+          }
+          if (!uri.length() || !requestUri.length()) {
+            return false;
+          }
+        }
+
+        return true;
+    }
+
+    bool canUpload(String requestUri) override  {
+        return false;
+    }
+
+    bool handle(ESP8266WebServer& server, HTTPMethod requestMethod, String requestUri) override {
+        currentReqUri = requestUri;
+        _fn(this, requestUri, requestMethod);
+        currentReqUri = "";
+        return true;
+    }
+
+    void upload(ESP8266WebServer& server, String requestUri, HTTPUpload& upload) override {}
+
+    String getWildCard(int wcIndex) {
+      return ::getWildCard(currentReqUri, _uri, wcIndex);
+    }
+protected:
+    String currentReqUri;
+    HandlerFunction _fn;
+    String _uri;
+    HTTPMethod _method;
+    char _wildcard;
+};
 
 LightServiceClass LightService;
 
@@ -62,8 +191,6 @@ LightHandler *LightServiceClass::getLightHandler(int numberOfTheLight) {
 
   return lightHandlers[numberOfTheLight];
 }
-
-void handleAllOthers();
 
 static const char* _ssdp_response_template =
   "HTTP/1.1 200 OK\r\n"
@@ -113,7 +240,383 @@ int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
   }
 }
 
+class LightGroup {
+  public:
+    LightGroup(aJsonObject *root) {
+      aJsonObject* jName = aJson.getObjectItem(root, "name");
+      aJsonObject* jLights = aJson.getObjectItem(root, "lights");
+      // jName and jLights guaranteed to exist
+      name = jName->valuestring;
+      for (int i = 0; i < aJson.getArraySize(jLights); i++) {
+        aJsonObject* jLight = aJson.getArrayItem(jLights, i);
+        // lights are 1-based and map to the 0-based bitfield
+        int lightNum = atoi(jLight->valuestring);
+        if (lightNum != 0) {
+          lights |= (1 << (lightNum - 1));
+        }
+      }
+    }
+    aJsonObject *getJson() {
+      aJsonObject *object = aJson.createObject();
+      aJson.addStringToObject(object, "name", name.c_str());
+      aJsonObject *lightsArray = aJson.createArray();
+      aJson.addItemToObject(object, "lights", lightsArray);
+      for (int i = 0; i < 16; i++) {
+        if (!((1 << i) & lights)) {
+          continue;
+        }
+        // add light to list
+        String lightNum = "";
+        lightNum += (i + 1);
+        aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
+      }
+      return object;
+    }
+    aJsonObject *getSceneJson() {
+      aJsonObject *object = aJson.createObject();
+      aJson.addStringToObject(object, "name", name.c_str());
+      aJson.addStringToObject(object, "owner", "api");
+      aJson.addStringToObject(object, "picture", "");
+      aJson.addStringToObject(object, "lastupdated", "");
+      aJson.addBooleanToObject(object, "recycle", false);
+      aJson.addBooleanToObject(object, "locked", false);
+      aJson.addNumberToObject(object, "version", 2);
+      aJsonObject *lightsArray = aJson.createArray();
+      aJson.addItemToObject(object, "lights", lightsArray);
+      for (int i = 0; i < 16; i++) {
+        if (!((1 << i) & lights)) {
+          continue;
+        }
+        // add light to list
+        String lightNum = "";
+        lightNum += (i + 1);
+        aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
+      }
+      return object;
+    }
+    unsigned int getLightMask() {
+      return lights;
+    }
+    // only used for scenes
+    String id;
+  private:
+    String name;
+    // use unsigned int to hold members of this group. 2 bytes -> supports up to 16 lights
+    unsigned int lights = 0;
+    // no need to hold the group type, only LightGroup is supported for API 1.4
+};
+
+void on(HandlerFunction fn, const String &wcUri, HTTPMethod method, char wildcard = '*') {
+  HTTP->addHandler(new WcFnRequestHandler(fn, wcUri, method, wildcard));
+}
+
+void descriptionFn() {
+  String str = "<root><specVersion><major>1</major><minor>0</minor></specVersion><URLBase>http://" + ipString + ":80/</URLBase><device><deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType><friendlyName>Philips hue (" + ipString + ")</friendlyName><manufacturer>Royal Philips Electronics</manufacturer><manufacturerURL>http://www.philips.com</manufacturerURL><modelDescription>Philips hue Personal Wireless Lighting</modelDescription><modelName>Philips hue bridge 2012</modelName><modelNumber>929000226503</modelNumber><modelURL>http://www.meethue.com</modelURL><serialNumber>00178817122c</serialNumber><UDN>uuid:2f402f80-da50-11e1-9b23-00178817122c</UDN><presentationURL>index.html</presentationURL><iconList><icon><mimetype>image/png</mimetype><height>48</height><width>48</width><depth>24</depth><url>hue_logo_0.png</url></icon><icon><mimetype>image/png</mimetype><height>120</height><width>120</width><depth>24</depth><url>hue_logo_3.png</url></icon></iconList></device></root>";
+  HTTP->send(200, "text/plain", str);
+  Serial.println(str);
+}
+
+void unimpFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  String str = "{}";
+  HTTP->send(200, "text/plain", str);
+  Serial.println(str);
+}
+
+void addConfigJson(aJsonObject *config);
+void sendJson(aJsonObject *config);
+void sendUpdated();
+void sendError(int type, String path, String description);
+void configFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  switch (method) {
+    case HTTP_GET: {
+      aJsonObject *root;
+      root = aJson.createObject();
+      addConfigJson(root);
+      sendJson(root);
+      break;
+    }
+    case HTTP_PUT:
+      sendUpdated();
+      break;
+    default:
+      sendError(4, requestUri, "Config method not supported");
+      break;
+  }
+}
+
+void sendSuccess(String name, String value);
+void authFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  // On the real bridge, the link button on the bridge must have been recently pressed for the command to execute successfully.
+  // We try to execute successfully regardless of a button for now.
+  sendSuccess("username", "api");
+}
+
+aJsonObject *getGroupJson();
+aJsonObject *getSceneJson();
+void addLightsJson(aJsonObject *config);
+void wholeConfigFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  // Serial.println("Respond with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
+  aJsonObject *root;
+  root = aJson.createObject();
+  // the default group 0 is never listed
+  aJson.addItemToObject(root, "groups", getGroupJson());
+  aJson.addItemToObject(root, "scenes", getSceneJson());
+  aJsonObject *config;
+  aJson.addItemToObject(root, "config", config = aJson.createObject());
+  addConfigJson(config);
+  aJsonObject *lights;
+  aJson.addItemToObject(root, "lights", lights = aJson.createObject());
+  addLightsJson(lights);
+  aJsonObject *schedules;
+  aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
+  aJsonObject *sensors;
+  aJson.addItemToObject(root, "sensors", sensors = aJson.createObject());
+  aJsonObject *rules;
+  aJson.addItemToObject(root, "rules", rules = aJson.createObject());
+  sendJson(root);
+}
+
+void sceneListingHandler();
+void sceneCreationHandler(String body);
+void scenesFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  switch (method) {
+    case HTTP_GET:
+      sceneListingHandler();
+      break;
+    case HTTP_POST:
+      sceneCreationHandler("");
+      break;
+    default:
+      sendError(4, requestUri, "Scene method not supported");
+      break;
+  }
+}
+
+int findSceneIndex(String id);
+LightGroup *findScene(String id);
+bool updateSceneSlot(int slot, String id, String body);
+void sendSuccess(String text);
+void sceneCreationHandler(String sceneId);
+void scenesIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  String sceneId = handler->getWildCard(1);
+  LightGroup *scene = findScene(sceneId);
+  switch (method) {
+    case HTTP_GET:
+      if (scene) {
+        sendJson(scene->getSceneJson());
+      } else {
+        sendError(3, "/scenes/"+sceneId, "Cannot retrieve scene that does not exist");
+      }
+      break;
+    case HTTP_PUT:
+      // validate body, delete old group, create new group
+      sceneCreationHandler(sceneId);
+      // XXX not a valid response according to API
+      sendUpdated();
+      break;
+    case HTTP_DELETE:
+      if (scene) {
+        updateSceneSlot(findSceneIndex(sceneId), sceneId, "");
+      } else {
+        sendError(3, requestUri, "Cannot delete scene that does not exist");
+      }
+      sendSuccess(requestUri+" deleted");
+      break;
+    default:
+      sendError(4, requestUri, "Scene method not supported");
+      break;
+  }
+}
+
+void scenesIdLightFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  switch (method) {
+    case HTTP_PUT:
+      // XXX Do something with this information...
+      // XXX not a valid response according to API
+      sendUpdated();
+      break;
+    default:
+      sendError(4, requestUri, "Scene method not supported");
+      break;
+  }
+}
+
+void groupListingHandler();
+void groupCreationHandler();
+void groupsFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  switch (method) {
+    case HTTP_GET:
+      groupListingHandler();
+      break;
+    case HTTP_POST:
+      groupCreationHandler();
+      break;
+    default:
+      sendError(4, requestUri, "Group method not supported");
+      break;
+  }
+}
+
+LightGroup *lightGroups[16] = {nullptr, };
+void groupCreationHandler(String sceneId);
+bool updateGroupSlot(int slot, String body);
+void groupsIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  String groupNumText = handler->getWildCard(1);
+  int groupNum = atoi(groupNumText.c_str()) - 1;
+  if ((groupNum == -1 && groupNumText != "0") || groupNum >= 16 || (groupNum >= 0 && !lightGroups[groupNum])) {
+    // error, invalid group number
+    sendError(3, requestUri, "Invalid group number");
+    return;
+  }
+
+  switch (method) {
+    case HTTP_GET:
+      if (groupNum != -1) {
+        sendJson(lightGroups[groupNum]->getJson());
+      } else {
+        aJsonObject *object = aJson.createObject();
+        aJson.addStringToObject(object, "name", "0");
+        aJsonObject *lightsArray = aJson.createArray();
+        aJson.addItemToObject(object, "lights", lightsArray);
+        for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
+          if (!lightHandlers[i]) {
+            continue;
+          }
+          // add light to list
+          String lightNum = "";
+          lightNum += (i + 1);
+          aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
+        }
+        sendJson(object);
+      }
+      break;
+    case HTTP_PUT:
+      // validate body, delete old group, create new group
+      updateGroupSlot(groupNum, HTTP->arg("plain"));
+      sendUpdated();
+      break;
+    case HTTP_DELETE:
+      updateGroupSlot(groupNum, "");
+      sendSuccess(requestUri+" deleted");
+      break;
+    default:
+      sendError(4, requestUri, "Group method not supported");
+      break;
+  }
+}
+
+void applyConfigToLightMask(unsigned int lights);
+void groupsIdActionFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  if (method != HTTP_PUT) {
+    // error, only PUT allowed
+    sendError(4, requestUri, "Only PUT supported for groups/*/action");
+    return;
+  }
+
+  String groupNumText = handler->getWildCard(1);
+  int groupNum = atoi(groupNumText.c_str()) - 1;
+  if ((groupNum == -1 && groupNumText != "0") || groupNum >= 16 || (groupNum >= 0 && !lightGroups[groupNum])) {
+    // error, invalid group number
+    sendError(3, requestUri, "Invalid group number");
+    return;
+  }
+  // parse input as if for all lights
+  unsigned int lightMask;
+  if (groupNum == -1) {
+    lightMask == 0xFFFF;
+  } else {
+    lightMask = lightGroups[groupNum]->getLightMask();
+  }
+  // apply to group
+  applyConfigToLightMask(lightMask);
+}
+
+void lightsFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  switch (method) {
+    case HTTP_GET: {
+      // dump existing lights
+      aJsonObject *lights = aJson.createObject();
+      addLightsJson(lights);
+      sendJson(lights);
+      break;
+    }
+    case HTTP_POST:
+      // "start" a "search" for "new" lights
+      sendSuccess("/lights", "Searching for new devices");
+      break;
+    default:
+      sendError(4, requestUri, "Light method not supported");
+      break;
+  }
+}
+
+void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler);
+void lightsIdFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod method) {
+  int numberOfTheLight = atoi(whandler->getWildCard(1).c_str()) - 1;
+  LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
+  switch (method) {
+    case HTTP_GET: {
+      aJsonObject *root;
+      root = aJson.createObject();
+      addLightJson(root, numberOfTheLight, handler);
+      sendJson(root);
+      break;
+    }
+    case HTTP_PUT:
+      // XXX do something here
+      sendUpdated();
+      break;
+    default:
+      sendError(4, requestUri, "Light method not supported");
+      break;
+  }
+}
+
+void lightsIdStateFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod method) {
+  int numberOfTheLight = atoi(whandler->getWildCard(1).c_str()) - 1;
+  LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
+  if (!handler) {
+    sendError(3, requestUri, "Requested light not available");
+    return;
+  }
+
+  switch (method) {
+    case HTTP_PUT: {
+      Serial.print("JSON Body:");
+      Serial.println(HTTP->arg("plain"));
+      aJsonObject* parsedRoot = aJson.parse(( char*) HTTP->arg("plain").c_str());
+      if (!parsedRoot) {
+        // unparseable json
+        sendError(2, requestUri, "Bad JSON body in request");
+        return;
+      }
+      HueLightInfo currentInfo = handler->getInfo(numberOfTheLight);
+      HueLightInfo newInfo;
+      if (!parseHueLightInfo(currentInfo, parsedRoot, &newInfo)) {
+        aJson.deleteItem(parsedRoot);
+        return;
+      }
+      handler->handleQuery(numberOfTheLight, newInfo, parsedRoot);
+      aJson.deleteItem(parsedRoot);
+      break;
+    }
+    default:
+      sendError(4, requestUri, "Light method not supported");
+      break;
+  }
+}
+
+void lightsNewFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
+  // dump empty object
+  aJsonObject *lights = aJson.createObject();
+  sendJson(lights);
+}
+
 void LightServiceClass::begin() {
+  begin(new ESP8266WebServer(80));
+}
+void LightServiceClass::begin(ESP8266WebServer *svr) {
+  HTTP = svr;
   macString = String(WiFi.macAddress());
   bridgeIDString = macString;
   bridgeIDString.replace(":", "");
@@ -127,9 +630,27 @@ void LightServiceClass::begin() {
   Serial.print(":");
   Serial.println(80);
 
-  HTTP.onNotFound(handleAllOthers);
+  HTTP->on("/description.xml", HTTP_GET, descriptionFn);
+  on(configFn, "/api/*/config", HTTP_ANY);
+  on(configFn, "/api/config", HTTP_GET);
+  on(wholeConfigFn, "/api/*", HTTP_GET);
+  on(authFn, "/api", HTTP_POST);
+  on(unimpFn, "/api/*/schedules", HTTP_GET);
+  on(unimpFn, "/api/*/rules", HTTP_GET);
+  on(unimpFn, "/api/*/sensors", HTTP_GET);
+  on(scenesFn, "/api/*/scenes", HTTP_ANY);
+  on(scenesIdFn, "/api/*/scenes/*", HTTP_ANY);
+  on(scenesIdLightFn, "/api/*/scenes/*/lightstates/*", HTTP_ANY);
+  on(scenesIdLightFn, "/api/*/scenes/*/lights/*/state", HTTP_ANY);
+  on(groupsFn, "/api/*/groups", HTTP_ANY);
+  on(groupsIdFn, "/api/*/groups/*", HTTP_ANY);
+  on(groupsIdActionFn, "/api/*/groups/*/action", HTTP_ANY);
+  on(lightsFn, "/api/*/lights", HTTP_ANY);
+  on(lightsNewFn, "/api/*/lights/new", HTTP_ANY);
+  on(lightsIdFn, "/api/*/lights/*", HTTP_ANY);
+  on(lightsIdStateFn, "/api/*/lights/*/state", HTTP_ANY);
 
-  HTTP.begin();
+  HTTP->begin();
 
   Serial.println("Starting SSDP...");
   SSDP.begin();
@@ -149,7 +670,7 @@ void LightServiceClass::begin() {
 }
 
 void LightServiceClass::update() {
-  HTTP.handleClient();
+  HTTP->handleClient();
 }
 
 void sendJson(aJsonObject *root)
@@ -160,7 +681,7 @@ void sendJson(aJsonObject *root)
   aJson.deleteItem(root);
   Serial.println(millis());
   Serial.println(msgStr);
-  HTTP.send(200, "text/plain", msgStr);
+  HTTP->send(200, "text/plain", msgStr);
   free(msgStr);
 }
 
@@ -258,7 +779,8 @@ void sendSuccess(String value) {
 }
 
 void sendUpdated() {
-  HTTP.send(200, "text/plain", "Updated.");
+  Serial.println("Updated.");
+  HTTP->send(200, "text/plain", "Updated.");
 }
 
 bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLightInfo *newInfo) {
@@ -392,86 +914,6 @@ String trimSlash(String uri) {
   return uri;
 }
 
-void configHandler(String user, String uri) {
-  aJsonObject *root;
-  root = aJson.createObject();
-  addConfigJson(root);
-  sendJson(root);
-}
-
-void authHandler(String user, String uri) {
-  // On the real bridge, the link button on the bridge must have been recently pressed for the command to execute successfully.
-  // We try to execute successfully regardless of a button for now.
-  isAuthorized = true; // FIXME: Instead, we should persist (save) the username and put it on the whitelist
-  String username = "api";
-  Serial.println("CLIENT: ");
-  Serial.println(username);
-
-  sendSuccess("username", username);
-}
-
-void lightsHandler(String user, String uri) {
-  uri = trimSlash(uri.substring(6));
-  if (uri == "") {
-    switch (HTTP.method()) {
-      case HTTP_GET: {
-          // dump existing lights
-          aJsonObject *lights = aJson.createObject();
-          addLightsJson(lights);
-          sendJson(lights);
-          break;
-        }
-      case HTTP_POST: {
-          // "start" a "search" for "new" lights
-          sendSuccess("/lights", "Searching for new devices");
-          break;
-        }
-    }
-    return;
-  }
-  if (uri == "new") {
-    // dump empty object
-    aJsonObject *lights = aJson.createObject();
-    sendJson(lights);
-    return;
-  }
-
-  // individual light state request
-  if (uri.endsWith("state")) {
-    // remove "/state"
-    String lightText = uri.substring(0, uri.length() - 6);
-    int numberOfTheLight = atoi(lightText.c_str()) - 1;
-
-    Serial.print("JSON Body:");
-    Serial.println(HTTP.arg("plain"));
-    aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
-    LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
-    if (!handler) {
-      sendError(3, uri, "Requested light not available");
-      return;
-    }
-    HueLightInfo currentInfo = handler->getInfo(numberOfTheLight);
-    if (parsedRoot) {
-      HueLightInfo newInfo;
-      if (!parseHueLightInfo(currentInfo, parsedRoot, &newInfo)) {
-        aJson.deleteItem(parsedRoot);
-        return;
-      }
-      handler->handleQuery(numberOfTheLight, newInfo, parsedRoot);
-      aJson.deleteItem(parsedRoot);
-    } else if (HTTP.arg("plain") != "") {
-      // unparseable json
-      sendError(2, "groups/0/action", "Bad JSON body in request");
-      return;
-    }
-
-    aJsonObject *root;
-    root = aJson.createObject();
-    addLightJson(root, numberOfTheLight, handler);
-    sendJson(root);
-  }
-}
-
 aJsonObject *validateGroupCreateBody(String body) {
   aJsonObject *root = aJson.parse(( char*) body.c_str());
   aJsonObject* jName = aJson.getObjectItem(root, "name");
@@ -484,8 +926,8 @@ aJsonObject *validateGroupCreateBody(String body) {
 
 void applyConfigToLightMask(unsigned int lights) {
   Serial.print("JSON Body:");
-  Serial.println(HTTP.arg("plain"));
-  aJsonObject* parsedRoot = aJson.parse(( char*) HTTP.arg("plain").c_str());
+  Serial.println(HTTP->arg("plain"));
+  aJsonObject* parsedRoot = aJson.parse(( char*) HTTP->arg("plain").c_str());
   if (parsedRoot) {
     for (int i = 0; i < LightService.getLightsAvailable(); i++) {
       LightHandler *handler = LightService.getLightHandler(i);
@@ -499,79 +941,11 @@ void applyConfigToLightMask(unsigned int lights) {
 
     // As per the spec, the response can be "Updated." for memory-constrained devices
     sendUpdated();
-  } else if (HTTP.arg("plain") != "") {
+  } else if (HTTP->arg("plain") != "") {
     // unparseable json
     sendError(2, "groups/0/action", "Bad JSON body in request");
   }
 }
-
-class LightGroup {
-  public:
-    LightGroup(aJsonObject *root) {
-      aJsonObject* jName = aJson.getObjectItem(root, "name");
-      aJsonObject* jLights = aJson.getObjectItem(root, "lights");
-      // jName and jLights guaranteed to exist
-      name = jName->valuestring;
-      for (int i = 0; i < aJson.getArraySize(jLights); i++) {
-        aJsonObject* jLight = aJson.getArrayItem(jLights, i);
-        // lights are 1-based and map to the 0-based bitfield
-        int lightNum = atoi(jLight->valuestring);
-        if (lightNum != 0) {
-          lights |= (1 << (lightNum - 1));
-        }
-      }
-    }
-    aJsonObject *getJson() {
-      aJsonObject *object = aJson.createObject();
-      aJson.addStringToObject(object, "name", name.c_str());
-      aJsonObject *lightsArray = aJson.createArray();
-      aJson.addItemToObject(object, "lights", lightsArray);
-      for (int i = 0; i < 16; i++) {
-        if (!((1 << i) & lights)) {
-          continue;
-        }
-        // add light to list
-        String lightNum = "";
-        lightNum += (i + 1);
-        aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
-      }
-      return object;
-    }
-    aJsonObject *getSceneJson() {
-      aJsonObject *object = aJson.createObject();
-      aJson.addStringToObject(object, "name", name.c_str());
-      aJson.addStringToObject(object, "owner", "api");
-      aJson.addStringToObject(object, "picture", "");
-      aJson.addStringToObject(object, "lastupdated", "");
-      aJson.addBooleanToObject(object, "recycle", false);
-      aJson.addBooleanToObject(object, "locked", false);
-      aJson.addNumberToObject(object, "version", 2);
-      aJsonObject *lightsArray = aJson.createArray();
-      aJson.addItemToObject(object, "lights", lightsArray);
-      for (int i = 0; i < 16; i++) {
-        if (!((1 << i) & lights)) {
-          continue;
-        }
-        // add light to list
-        String lightNum = "";
-        lightNum += (i + 1);
-        aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
-      }
-      return object;
-    }
-    unsigned int getLightMask() {
-      return lights;
-    }
-    // only used for scenes
-    String id;
-  private:
-    String name;
-    // use unsigned int to hold members of this group. 2 bytes -> supports up to 16 lights
-    unsigned int lights = 0;
-    // no need to hold the group type, only LightGroup is supported for API 1.4
-};
-
-LightGroup *lightGroups[16] = {nullptr, };
 
 // returns true on failure
 bool updateGroupSlot(int slot, String body) {
@@ -612,7 +986,7 @@ void groupCreationHandler() {
     sendError(301, "groups", "Groups table full");
     return;
   }
-  if (!updateGroupSlot(availableSlot, HTTP.arg("plain"))) {
+  if (!updateGroupSlot(availableSlot, HTTP->arg("plain"))) {
     String slot = "";
     slot += (availableSlot + 1);
     sendSuccess("id", slot);
@@ -634,104 +1008,6 @@ aJsonObject *getGroupJson() {
 
 void groupListingHandler() {
   sendJson(getGroupJson());
-}
-
-void groupsHandler(String user, String uri) {
-  uri = trimSlash(uri.substring(6));
-  if (uri == "") {
-    switch (HTTP.method()) {
-      case HTTP_GET:
-        groupListingHandler();
-        break;
-      case HTTP_POST:
-        groupCreationHandler();
-        break;
-      default:
-        sendError(4, "/api/" + user + "/groups", "Group method not supported");
-        break;
-    }
-    return;
-  }
-
-  int nextSlash = uri.indexOf("/");
-  int groupNum = -1;
-  String groupNumText;
-  if (nextSlash == -1) {
-    groupNumText = uri;
-    uri = "";
-  } else {
-    groupNumText = uri.substring(0, nextSlash);
-    uri = trimSlash(uri.substring(nextSlash));
-  }
-  groupNum = atoi(groupNumText.c_str()) - 1;
-  if ((groupNum == -1 && groupNumText != "0") || groupNum >= 16 || (groupNum >= 0 && !lightGroups[groupNum])) {
-    // error, invalid group number
-    String resource = "/api/";
-    resource += user;
-    resource += "/groups/";
-    resource += groupNumText;
-    sendError(3, resource, "Invalid group number");
-    return;
-  }
-
-  if (uri == "") {
-    switch (HTTP.method()) {
-      case HTTP_GET:
-        if (groupNum != -1) {
-          sendJson(lightGroups[groupNum]->getJson());
-        } else {
-          aJsonObject *object = aJson.createObject();
-          aJson.addStringToObject(object, "name", "0");
-          aJsonObject *lightsArray = aJson.createArray();
-          aJson.addItemToObject(object, "lights", lightsArray);
-          for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
-            if (!lightHandlers[i]) {
-              continue;
-            }
-            // add light to list
-            String lightNum = "";
-            lightNum += (i + 1);
-            aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
-          }
-          sendJson(object);
-        }
-        break;
-      case HTTP_PUT:
-        // validate body, delete old group, create new group
-        updateGroupSlot(groupNum, HTTP.arg("plain"));
-        sendUpdated();
-        break;
-      case HTTP_DELETE: {
-        updateGroupSlot(groupNum, "");
-        String message = "/groups/";
-        message += (groupNum + 1);
-        message += " deleted";
-        sendSuccess(message);
-        break;
-      }
-      default:
-        sendError(4, "/api/" + user + "/groups", "Group method not supported");
-        break;
-    }
-    return;
-  }
-
-  if (uri == "action") {
-    if (HTTP.method() != HTTP_PUT) {
-      // error, only PUT allowed
-      sendError(4, "/api/" + user + "/groups/" + groupNum + "/action", "Only PUT supported for groups/*/action");
-      return;
-    }
-    // parse input as if for all lights
-    unsigned int lightMask;
-    if (groupNum == -1) {
-      lightMask == 0xFFFF;
-    } else {
-      lightMask = lightGroups[groupNum]->getLightMask();
-    }
-    // apply to group
-    applyConfigToLightMask(lightMask);
-  }
 }
 
 LightGroup *lightScenes[16] = {nullptr, };
@@ -784,7 +1060,7 @@ void sceneCreationHandler(String id) {
     return;
   }
   // updateSceneSlot sends failure messages
-  if (!updateSceneSlot(sceneIndex, id, HTTP.arg("plain"))) {
+  if (!updateSceneSlot(sceneIndex, id, HTTP->arg("plain"))) {
     if (id == "") {
       id = String(sceneIndex);
     }
@@ -821,114 +1097,6 @@ LightGroup *findScene(String id) {
   return nullptr;
 }
 
-void scenesHandler(String user, String uri) {
-  uri = trimSlash(uri.substring(6));
-  if (uri == "") {
-    switch (HTTP.method()) {
-      case HTTP_GET:
-        sceneListingHandler();
-        break;
-      case HTTP_POST:
-        sceneCreationHandler("");
-        break;
-      default:
-        sendError(4, "/api/" + user + "/scenes", "Scene method not supported");
-        break;
-    }
-    return;
-  }
-
-  int nextSlash = uri.indexOf("/");
-  String sceneId;
-  if (nextSlash == -1) {
-    sceneId = uri;
-    uri = "";
-  } else {
-    sceneId = uri.substring(0, nextSlash);
-    uri = trimSlash(uri.substring(nextSlash));
-  }
-  LightGroup *scene = findScene(sceneId);
-
-  if (uri == "") {
-    switch (HTTP.method()) {
-      case HTTP_GET:
-        if (scene) {
-          sendJson(scene->getSceneJson());
-        } else {
-          sendError(3, "/scenes/"+sceneId, "Cannot retrieve scene that does not exist");
-        }
-        break;
-      case HTTP_PUT:
-        // validate body, delete old group, create new group
-        sceneCreationHandler(sceneId);
-	      // XXX not a valid response according to API
-        sendUpdated();
-        break;
-      case HTTP_DELETE: {
-        if (scene) {
-          updateSceneSlot(findSceneIndex(sceneId), sceneId, "");
-        } else {
-          sendError(3, "/scenes/"+sceneId, "Cannot delete scene that does not exist");
-        }
-        String message = "/scenes/";
-        message += sceneId;
-        message += " deleted";
-        sendSuccess(message);
-        break;
-      }
-      default: {
-        String path = "/api/";
-        path += user;
-        path += "/scenes";
-        sendError(4, path, "Scene method not supported");
-        break;
-      }
-    }
-    return;
-  }
-
-  if (uri.startsWith("lightstates/") || uri.startsWith("lights/")) {
-    uri = uri.substring(12);
-    if (HTTP.method() != HTTP_POST && HTTP.method() != HTTP_PUT) {
-      // error, only POST allowed
-      sendError(4, "/api/" + user + "/scenes/" + sceneId + "/lightstates", "Only PUT and POST supported for scenes/*/light*");
-      return;
-    }
-    // XXX Do something with this information...
-    // XXX not a valid response according to API
-    sendUpdated();
-  }
-}
-
-void wholeConfigHandler(String user, String uri) {
-  // Serial.println("Respond with complete json as in https://github.com/probonopd/ESP8266HueEmulator/wiki/Hue-API#get-all-information-about-the-bridge");
-  aJsonObject *root;
-  root = aJson.createObject();
-  // the default group 0 is never listed
-  aJson.addItemToObject(root, "groups", getGroupJson());
-  aJson.addItemToObject(root, "scenes", getSceneJson());
-  aJsonObject *config;
-  aJson.addItemToObject(root, "config", config = aJson.createObject());
-  addConfigJson(config);
-  aJsonObject *lights;
-  aJson.addItemToObject(root, "lights", lights = aJson.createObject());
-  addLightsJson(lights);
-  aJsonObject *schedules;
-  aJson.addItemToObject(root, "schedules", schedules = aJson.createObject());
-  aJsonObject *sensors;
-  aJson.addItemToObject(root, "sensors", sensors = aJson.createObject());
-  aJsonObject *rules;
-  aJson.addItemToObject(root, "rules", rules = aJson.createObject());
-  sendJson(root);
-}
-
-void descriptionHandler(String user, String uri) {
-  WiFiClient client = HTTP.client();
-  String str = "<?xml version=\"1.0\"?><root><specVersion><major>1</major><minor>0</minor></specVersion><URLBase>http://" + ipString + ":80/</URLBase><device><deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType><friendlyName>Philips hue (" + ipString + ")</friendlyName><manufacturer>Royal Philips Electronics</manufacturer><manufacturerURL>http://www.philips.com</manufacturerURL><modelDescription>Philips hue Personal Wireless Lighting</modelDescription><modelName>Philips hue bridge 2012</modelName><modelNumber>929000226503</modelNumber><modelURL>http://www.meethue.com</modelURL><serialNumber>00178817122c</serialNumber><UDN>uuid:2f402f80-da50-11e1-9b23-00178817122c</UDN><presentationURL>index.html</presentationURL><iconList><icon><mimetype>image/png</mimetype><height>48</height><width>48</width><depth>24</depth><url>hue_logo_0.png</url></icon><icon><mimetype>image/png</mimetype><height>120</height><width>120</width><depth>24</depth><url>hue_logo_3.png</url></icon></iconList></device></root>";
-  HTTP.send(200, "text/xml", str);
-  Serial.println(str);
-}
-
 String methodToString(int method) {
   switch (method) {
     case HTTP_POST: return "POST";
@@ -939,77 +1107,5 @@ String methodToString(int method) {
     case HTTP_OPTIONS: return "OPTIONS";
     default: return "unknown";
   }
-}
-
-void handleAllOthers() {
-  Serial.print("=== ");
-  Serial.println(millis());
-  Serial.print("Method: ");
-  Serial.println(methodToString(HTTP.method()));
-  String fullUri = trimSlash(HTTP.uri());
-  Serial.print("requestedUri: ");
-  Serial.println(fullUri);
-
-  if (fullUri == "description.xml") {
-    descriptionHandler("", fullUri);
-    Serial.println(millis());
-    return;
-  }
-
-  // make sure /api is there, rip it off along with trailing slash if present
-  if (!fullUri.startsWith("api")) {
-    // bail, unimplemented
-    HTTP.send(200, "text/plain", "{}");
-    Serial.println("FIXME: To be implemented");
-    return;
-  }
-  fullUri.remove(0, 3);
-  fullUri = trimSlash(fullUri);
-  // get user
-  String user;
-  int userEnd = fullUri.indexOf('/');
-  if (userEnd == -1) {
-    user = fullUri;
-    fullUri = "";
-  } else {
-    user = fullUri.substring(0, userEnd);
-    fullUri.remove(0, userEnd);
-  }
-  String requestedUri = trimSlash(fullUri);
-  if (requestedUri.endsWith("/")) {
-    requestedUri = requestedUri.substring(0, requestedUri.length() - 1);
-  }
-  // requestedUri is remaining path, no leading or trailing slash
-  Serial.print("URI: ");
-  Serial.println(requestedUri);
-
-  if ( requestedUri == "config" || (requestedUri == "" && user == "config") ) {
-    configHandler(user, requestedUri);
-  } else if (requestedUri == "") {
-    if (user == "") {
-      authHandler(user, requestedUri);
-    } else {
-      wholeConfigHandler(user, requestedUri);
-    }
-  } else if (requestedUri.startsWith("lights")) {
-    lightsHandler(user, requestedUri);
-  } else if (requestedUri.startsWith("groups")) {
-    groupsHandler(user, requestedUri);
-  } else if (requestedUri.startsWith("scenes")) {
-    scenesHandler(user, requestedUri);
-  } else if (requestedUri.startsWith("sensors")) {
-    HTTP.send(200, "text/plain", "{}");
-  } else if (requestedUri.startsWith("sechedules")) {
-    HTTP.send(200, "text/plain", "{}");
-  } else if (requestedUri.startsWith("rules")) {
-    HTTP.send(200, "text/plain", "{}");
-  } else {
-    HTTP.send(200, "text/plain", "()");
-    Serial.println("FIXME: To be implemented");
-
-    // Print what the client has POSTed
-    for (uint8_t i = 0; i < HTTP.args(); i++) Serial.printf("ARG[%u]: %s=%s\n", i, HTTP.argName(i).c_str(), HTTP.arg(i).c_str());
-  }
-  Serial.println(millis());
 }
 
