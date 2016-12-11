@@ -428,13 +428,60 @@ void scenesIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod metho
   }
 }
 
+aJsonObject *wrapWithSuccess(aJsonObject *body) {
+  aJsonObject *success = aJson.createObject();
+  aJson.addItemToObject(success, "success", body);
+  return success;
+}
+
+aJsonObject *generateScenesIdLightPutResponse(aJsonObject *body, String sceneId, String lightId) {
+  aJsonObject *root = aJson.createArray();
+  for (int i = 0; i < aJson.getArraySize(body); i++) {
+    aJsonObject *success = aJson.createObject();
+    aJson.addItemToArray(root, wrapWithSuccess(success));
+    aJsonObject *entry = aJson.getArrayItem(body, i);
+    // remove /api/api
+    String target = "/scenes/" + sceneId + "/lightstates/" + lightId + "/";
+    target += entry->name;
+    switch (entry->type) {
+      case aJson_Boolean:
+        aJson.addBooleanToObject(success, target.c_str(), entry->valuebool);
+        break;
+      case aJson_Int:
+        aJson.addNumberToObject(success, target.c_str(), entry->valueint);
+        break;
+      case aJson_String:
+        aJson.addStringToObject(success, target.c_str(), entry->valuestring);
+        break;
+      case aJson_Float:
+        aJson.addNumberToObject(success, target.c_str(), entry->valuefloat);
+        break;
+      case aJson_Array: {
+        aJsonObject *xy = aJson.createArray();
+        aJson.addItemToObject(success, target.c_str(), xy);
+        for (int j = 0; j < aJson.getArraySize(entry); j++) {
+          aJson.addItemToArray(xy, aJson.createItem(aJson.getArrayItem(entry, j)->valuefloat));
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return root;
+}
+
 void scenesIdLightFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   switch (method) {
-    case HTTP_PUT:
+    case HTTP_PUT: {
+      Serial.print("Body: ");
+      Serial.println(HTTP->arg("plain"));
       // XXX Do something with this information...
-      // XXX not a valid response according to API
-      sendUpdated();
+      aJsonObject* body = aJson.parse(( char*) HTTP->arg("plain").c_str());
+      sendJson(generateScenesIdLightPutResponse(body, handler->getWildCard(1), handler->getWildCard(2)));
+      aJson.deleteItem(body);
       break;
+    }
     default:
       sendError(4, requestUri, "Scene method not supported");
       break;
