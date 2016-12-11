@@ -154,6 +154,8 @@ void setup() {
   
   // Show that we are connected
   infoLight(green);
+  pinMode(LED_BUILTIN, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
+  digitalWrite(LED_BUILTIN, HIGH);  // Turn the LED off by making the voltage HIGH
 
   LightService.begin();
 
