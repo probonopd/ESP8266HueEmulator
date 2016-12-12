@@ -628,6 +628,7 @@ void lightsIdStateFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod
   }
 
   switch (method) {
+    case HTTP_POST:
     case HTTP_PUT: {
       Serial.print("JSON Body:");
       Serial.println(HTTP->arg("plain"));
