@@ -356,6 +356,17 @@ void unimpFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) 
   Serial.println(str);
 }
 
+aJsonObject *generateConfigPutResponse(aJsonObject *body) {
+  aJsonObject *root = aJson.createArray();
+  for (int i = 0; i < aJson.getArraySize(body); i++) {
+    aJsonObject *success = aJson.createObject();
+    aJson.addItemToArray(root, success);
+    aJsonObject *entry = aJson.getArrayItem(body, i);
+    aJson.addStringToObject(success, (String("/config/")+entry->name).c_str(), entry->valuestring);
+  }
+  return root;
+}
+
 void addConfigJson(aJsonObject *config);
 void sendJson(aJsonObject *config);
 void sendUpdated();
@@ -369,9 +380,14 @@ void configFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method)
       sendJson(root);
       break;
     }
-    case HTTP_PUT:
-      sendUpdated();
+    case HTTP_PUT: {
+      Serial.print("Body: ");
+      Serial.println(HTTP->arg("plain"));
+      aJsonObject* body = aJson.parse(( char*) HTTP->arg("plain").c_str());
+      sendJson(generateConfigPutResponse(body));
+      aJson.deleteItem(body);
       break;
+    }
     default:
       sendError(4, requestUri, "Config method not supported");
       break;
