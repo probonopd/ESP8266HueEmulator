@@ -4,7 +4,6 @@
 #include <WiFiUdp.h>
 #include "SSDP.h"
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
-#include <NeoPixelBus.h> // NeoPixelAnimator branch
 #include <assert.h>
 
 String macString;
@@ -16,6 +15,41 @@ String gatewayString;
 String client;
 
 ESP8266WebServer *HTTP;
+
+struct rgbcolor {
+  rgbcolor(uint8_t r, uint8_t g, uint8_t b) : r(r), g(g), b(b) {};
+  uint8_t r;
+  uint8_t g;
+  uint8_t b;
+};
+
+#define MIN(a,b) ((a<b)?a:b)
+#define MAX(a,b) ((a>b)?a:b)
+struct hsvcolor {
+  hsvcolor(const rgbcolor& color) {
+    float r = color.r/COLOR_SATURATION;
+    float g = color.g/COLOR_SATURATION;
+    float b = color.b/COLOR_SATURATION;
+    float min = MIN(MIN(r,g),b);
+    v = MAX(MAX(r,g),b);
+    float diff = v - min;
+    h = 0;
+    s = (!v)?0:(diff/v);
+    if (diff) {
+      if (r == v) {
+            h = (g - b) / diff + (g < b ? 6.0f : 0.0f);
+        } else if (g == v) {
+            h = (b - r) / diff + 2.0f;
+        } else {
+            h = (r - g) / diff + 4.0f;
+        }
+        h /= 6.0f;
+    }
+  };
+  uint8_t h;
+  uint8_t s;
+  uint8_t v;
+};
 
 String removeSlashes(String uri) {
   if (uri[0] == '/') {
@@ -745,7 +779,7 @@ void sendJson(aJsonObject *root)
 // Based on http://stackoverflow.com/questions/22564187/rgb-to-philips-hue-hsb
 // The code is based on this brilliant note: https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/commit/f41091cf671e13fe8c32fcced12604cd31cceaf3
 
-RgbColor getXYtoRGB(float x, float y, int brightness_raw) {
+rgbcolor getXYtoRGB(float x, float y, int brightness_raw) {
   float brightness = ((float)brightness_raw) / 255.0f;
   float bright_y = brightness / y;
   float X = x * bright_y;
@@ -764,20 +798,20 @@ RgbColor getXYtoRGB(float x, float y, int brightness_raw) {
   float g = G <= 0.0031308 ? 12.92 * G : (linear_interval) * pow(G, inv_gamma) - linear_delta;
   float b = B <= 0.0031308 ? 12.92 * B : (linear_interval) * pow(B, inv_gamma) - linear_delta;
 
-  return RgbColor(r * COLOR_SATURATION,
+  return rgbcolor(r * COLOR_SATURATION,
                   g * COLOR_SATURATION,
                   b * COLOR_SATURATION);
 }
 
-int getHue(HsbColor hsb) {
-  return hsb.H * 360 * 182.04;
+int getHue(hsvcolor hsb) {
+  return hsb.h * 360 * 182.04;
 }
 
-int getSaturation(HsbColor hsb) {
-  return hsb.S * COLOR_SATURATION;
+int getSaturation(hsvcolor hsb) {
+  return hsb.s * COLOR_SATURATION;
 }
 
-RgbColor getMirektoRGB(int mirek) {
+rgbcolor getMirektoRGB(int mirek) {
   int hectemp = 10000 / mirek;
   int r, g, b;
   if (hectemp <= 66) {
@@ -792,7 +826,7 @@ RgbColor getMirektoRGB(int mirek) {
   r = r > COLOR_SATURATION ? COLOR_SATURATION : r;
   g = g > COLOR_SATURATION ? COLOR_SATURATION : g;
   b = b > COLOR_SATURATION ? COLOR_SATURATION : b;
-  return RgbColor(r, g, b);
+  return rgbcolor(r, g, b);
 }
 
 void sendError(int type, String path, String description) {
@@ -878,7 +912,7 @@ bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLig
       sendError(5, "/api/api/lights/?/state", "xy color coordinates incomplete");
       return false;
     }
-    HsbColor hsb = getXYtoRGB(elem0->valuefloat, elem1->valuefloat, newInfo->brightness);
+    hsvcolor hsb = getXYtoRGB(elem0->valuefloat, elem1->valuefloat, newInfo->brightness);
     newInfo->hue = getHue(hsb);
     newInfo->saturation = getSaturation(hsb);
   } else if (ctState) {
@@ -888,7 +922,7 @@ bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLig
       return false;
     }
 
-    HsbColor hsb = getMirektoRGB(mirek);
+    hsvcolor hsb = getMirektoRGB(mirek);
     newInfo->hue = getHue(hsb);
     newInfo->saturation = getSaturation(hsb);
   } else if (hueState || satState) {
