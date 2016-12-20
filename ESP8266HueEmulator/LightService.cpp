@@ -208,7 +208,7 @@ static const char* _ssdp_notify_template =
   "HOST: 239.255.255.250:1900\r\n"
   "NTS: ssdp:alive\r\n"
   "CACHE-CONTROL: max-age=%u\r\n" // SSDP_INTERVAL
-  "LOCATION: http://%u.%u.%u.%u:%u/%s\r\n" // WiFi.localIP(), _port, _schemaURL
+  "LOCATION: http://%s:%u/%s\r\n" // WiFi.localIP(), _port, _schemaURL
   "SERVER: Arduino/1.0 UPNP/1.1 %s/%s\r\n" // _modelName, _modelNumber
   "hue-bridgeid: %s\r\n"
   "NT: %s\r\n"  // _deviceType
@@ -223,7 +223,7 @@ int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
     return snprintf(buffer, buff_len,
       _ssdp_notify_template,
       interval,
-      IP2STR(&ip), port, schemaURL,
+      ipString.c_str(), port, schemaURL,
       modelName, modelNumber,
       bridgeIDString.c_str(),
       deviceType,
@@ -232,7 +232,7 @@ int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
     return snprintf(buffer, buff_len,
       _ssdp_response_template,
       interval,
-      IP2STR(&ip), port, schemaURL,
+      ipString.c_str(), port, schemaURL,
       modelName, modelNumber,
       "001788FFFE142F92",
       deviceType,
