@@ -17,6 +17,7 @@ struct HueLightInfo {
   int hue = 0, saturation = 0;
   HueAlert alert = ALERT_NONE;
   HueEffect effect = EFFECT_NONE;
+  unsigned int transitionTime = 800; // by default there is a transition time to the new state of 400 milliseconds
 };
 
 class aJsonObject;

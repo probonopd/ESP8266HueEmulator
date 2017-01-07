@@ -230,7 +230,7 @@ static const char* _ssdp_response_template =
   "HTTP/1.1 200 OK\r\n"
   "EXT:\r\n"
   "CACHE-CONTROL: max-age=%u\r\n" // SSDP_INTERVAL
-  "LOCATION: http://%u.%u.%u.%u:%u/%s\r\n" // WiFi.localIP(), _port, _schemaURL
+  "LOCATION: http://%s:%u/%s\r\n" // WiFi.localIP(), _port, _schemaURL
   "SERVER: Arduino/1.0 UPNP/1.1 %s/%s\r\n" // _modelName, _modelNumber
   "hue-bridgeid: %s\r\n"
   "ST: %s\r\n"  // _deviceType
@@ -268,7 +268,7 @@ int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
       interval,
       ipString.c_str(), port, schemaURL,
       modelName, modelNumber,
-      "001788FFFE142F92",
+      bridgeIDString.c_str(),
       deviceType,
       uuid);
   }
@@ -713,6 +713,7 @@ void lightsNewFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod meth
 void LightServiceClass::begin() {
   begin(new ESP8266WebServer(80));
 }
+
 void LightServiceClass::begin(ESP8266WebServer *svr) {
   HTTP = svr;
   macString = String(WiFi.macAddress());
@@ -732,6 +733,7 @@ void LightServiceClass::begin(ESP8266WebServer *svr) {
   on(configFn, "/api/*/config", HTTP_ANY);
   on(configFn, "/api/config", HTTP_GET);
   on(wholeConfigFn, "/api/*", HTTP_GET);
+  on(wholeConfigFn, "/api/", HTTP_GET);
   on(authFn, "/api", HTTP_POST);
   on(unimpFn, "/api/*/schedules", HTTP_GET);
   on(unimpFn, "/api/*/rules", HTTP_GET);
@@ -904,6 +906,7 @@ bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLig
       newInfo->effect = EFFECT_NONE;
     }
   }
+  
   // pull alert
   aJsonObject* alertState = aJson.getObjectItem(parsedRoot, "alert");
   if (alertState) {
@@ -915,6 +918,12 @@ bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLig
     } else {
       newInfo->alert = ALERT_NONE;
     }
+  }
+
+  // pull transitiontime
+  aJsonObject* transitiontimeState = aJson.getObjectItem(parsedRoot, "transitiontime");
+  if (transitiontimeState) {
+    newInfo->transitionTime = transitiontimeState->valueint;
   }
 
   aJsonObject* hueState = aJson.getObjectItem(parsedRoot, "hue");

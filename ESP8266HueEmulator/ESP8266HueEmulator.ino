@@ -24,7 +24,6 @@ RgbColor red = RgbColor(COLOR_SATURATION, 0, 0);
 RgbColor green = RgbColor(0, COLOR_SATURATION, 0);
 RgbColor white = RgbColor(COLOR_SATURATION);
 RgbColor black = RgbColor(0);
-unsigned int transitionTime = 800; // by default there is a transition time to the new state of 400 milliseconds
 
 // Settings for the NeoPixels
 #define pixelCount 30
@@ -86,7 +85,7 @@ class PixelHandler : public LightHandler {
           HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, newColor, param.progress);
           strip.SetPixelColor(lightNumber, updatedColor);
         };
-        animator.StartAnimation(lightNumber, transitionTime, animUpdate);
+        animator.StartAnimation(lightNumber, _info.transitionTime, animUpdate);
       }
       else
       {
@@ -96,7 +95,7 @@ class PixelHandler : public LightHandler {
           HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, black, param.progress);
           strip.SetPixelColor(lightNumber, updatedColor);
         };
-        animator.StartAnimation(lightNumber, transitionTime, animUpdate);
+        animator.StartAnimation(lightNumber, _info.transitionTime, animUpdate);
       }
     }
 
@@ -117,11 +116,10 @@ void setup() {
   WiFi.begin(ssid, password);
   infoLight(white);
 
-  if (WiFi.waitForConnectResult() != WL_CONNECTED) {
-    Serial.println("WiFi Failed");
-    // Show that we are connected
+  while (WiFi.status() != WL_CONNECTED) {
     infoLight(red);
-    while (1) delay(100);
+    delay(500);
+    Serial.print(".");
   }
   
   // Port defaults to 8266
