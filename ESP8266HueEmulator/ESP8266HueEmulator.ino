@@ -26,10 +26,12 @@ RgbColor white = RgbColor(COLOR_SATURATION);
 RgbColor black = RgbColor(0);
 
 // Settings for the NeoPixels
+#define NUM_PIXELS_PER_LIGHT 10 // How many physical LEDs per emulated bulb
+
 #define pixelCount 30
 #define pixelPin 2 // Strip is attached to GPIO2 on ESP-01
-NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(pixelCount, pixelPin);
-NeoPixelAnimator animator(pixelCount, NEO_MILLISECONDS); // NeoPixel animation management object
+NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(MAX_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, pixelPin);
+NeoPixelAnimator animator(MAX_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, NEO_MILLISECONDS); // NeoPixel animation management object
 
 HsbColor getHsb(int hue, int sat, int bri) {
   float H, S, B;
@@ -69,7 +71,10 @@ class PixelHandler : public LightHandler {
             if (currentHue > 1) currentHue -= 1;
             HslColor updatedColor = HslColor(currentHue, newColor.S, newColor.L);
             RgbColor currentColor = updatedColor;
-            strip.SetPixelColor(lightNumber, updatedColor);
+
+            for(int i=lightNumber * NUM_PIXELS_PER_LIGHT; i < (lightNumber * NUM_PIXELS_PER_LIGHT) + NUM_PIXELS_PER_LIGHT; i++) {
+              strip.SetPixelColor(i, updatedColor);
+            }
 
             // loop the animation until canceled
             if (param.state == AnimationState_Completed) {
@@ -83,7 +88,10 @@ class PixelHandler : public LightHandler {
         {
           // progress will start at 0.0 and end at 1.0
           HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, newColor, param.progress);
-          strip.SetPixelColor(lightNumber, updatedColor);
+          
+          for(int i=lightNumber * NUM_PIXELS_PER_LIGHT; i < (lightNumber * NUM_PIXELS_PER_LIGHT) + NUM_PIXELS_PER_LIGHT; i++) {
+            strip.SetPixelColor(i, updatedColor);
+          }
         };
         animator.StartAnimation(lightNumber, _info.transitionTime, animUpdate);
       }
@@ -93,7 +101,10 @@ class PixelHandler : public LightHandler {
         {
           // progress will start at 0.0 and end at 1.0
           HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, black, param.progress);
-          strip.SetPixelColor(lightNumber, updatedColor);
+          
+          for(int i=lightNumber * NUM_PIXELS_PER_LIGHT; i < (lightNumber * NUM_PIXELS_PER_LIGHT) + NUM_PIXELS_PER_LIGHT; i++) {
+            strip.SetPixelColor(i, updatedColor);
+          }
         };
         animator.StartAnimation(lightNumber, _info.transitionTime, animUpdate);
       }
