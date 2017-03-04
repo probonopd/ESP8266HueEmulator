@@ -362,7 +362,30 @@ aJsonObject *generateConfigPutResponse(aJsonObject *body) {
     aJsonObject *success = aJson.createObject();
     aJson.addItemToArray(root, success);
     aJsonObject *entry = aJson.getArrayItem(body, i);
-    aJson.addStringToObject(success, (String("/config/")+entry->name).c_str(), entry->valuestring);
+    switch (entry->type) {
+      case aJson_Boolean:
+        aJson.addBooleanToObject(success, (String("/config/")+entry->name).c_str(), entry->valuebool);
+        break;
+      case aJson_Int:
+        aJson.addNumberToObject(success, (String("/config/")+entry->name).c_str(), entry->valueint);
+        break;
+      case aJson_String:
+        aJson.addStringToObject(success, (String("/config/")+entry->name).c_str(), entry->valuestring);
+        break;
+      case aJson_Float:
+        aJson.addNumberToObject(success, (String("/config/")+entry->name).c_str(), entry->valuefloat);
+        break;
+      case aJson_Array: {
+        aJsonObject *xy = aJson.createArray();
+        aJson.addItemToObject(success, (String("/config/")+entry->name).c_str(), xy);
+        for (int j = 0; j < aJson.getArraySize(entry); j++) {
+          aJson.addItemToArray(xy, aJson.createItem(aJson.getArrayItem(entry, j)->valuefloat));
+        }
+        break;
+      }
+      default:
+        break;
+    }
   }
   return root;
 }
