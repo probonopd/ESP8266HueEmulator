@@ -356,28 +356,36 @@ void unimpFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) 
   Serial.println(str);
 }
 
-aJsonObject *generateConfigPutResponse(aJsonObject *body) {
+aJsonObject *wrapWithSuccess(aJsonObject *body) {
+  aJsonObject *success = aJson.createObject();
+  aJson.addItemToObject(success, "success", body);
+  return success;
+}
+
+// targetBase is assumed to have a trailing slash (/)
+aJsonObject *generateTargetPutResponse(aJsonObject *body, String targetBase) {
   aJsonObject *root = aJson.createArray();
   for (int i = 0; i < aJson.getArraySize(body); i++) {
     aJsonObject *success = aJson.createObject();
-    aJson.addItemToArray(root, success);
+    aJson.addItemToArray(root, wrapWithSuccess(success));
     aJsonObject *entry = aJson.getArrayItem(body, i);
+    String target = targetBase + entry->name;
     switch (entry->type) {
       case aJson_Boolean:
-        aJson.addBooleanToObject(success, (String("/config/")+entry->name).c_str(), entry->valuebool);
+        aJson.addBooleanToObject(success, target.c_str(), entry->valuebool);
         break;
       case aJson_Int:
-        aJson.addNumberToObject(success, (String("/config/")+entry->name).c_str(), entry->valueint);
+        aJson.addNumberToObject(success, target.c_str(), entry->valueint);
         break;
       case aJson_String:
-        aJson.addStringToObject(success, (String("/config/")+entry->name).c_str(), entry->valuestring);
+        aJson.addStringToObject(success, target.c_str(), entry->valuestring);
         break;
       case aJson_Float:
-        aJson.addNumberToObject(success, (String("/config/")+entry->name).c_str(), entry->valuefloat);
+        aJson.addNumberToObject(success, target.c_str(), entry->valuefloat);
         break;
       case aJson_Array: {
         aJsonObject *xy = aJson.createArray();
-        aJson.addItemToObject(success, (String("/config/")+entry->name).c_str(), xy);
+        aJson.addItemToObject(success, target.c_str(), xy);
         for (int j = 0; j < aJson.getArraySize(entry); j++) {
           aJson.addItemToArray(xy, aJson.createItem(aJson.getArrayItem(entry, j)->valuefloat));
         }
@@ -407,7 +415,7 @@ void configFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method)
       Serial.print("Body: ");
       Serial.println(HTTP->arg("plain"));
       aJsonObject* body = aJson.parse(( char*) HTTP->arg("plain").c_str());
-      sendJson(generateConfigPutResponse(body));
+      sendJson(generateTargetPutResponse(body, "/config/"));
       aJson.deleteItem(body);
       break;
     }
@@ -501,49 +509,6 @@ void scenesIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod metho
   }
 }
 
-aJsonObject *wrapWithSuccess(aJsonObject *body) {
-  aJsonObject *success = aJson.createObject();
-  aJson.addItemToObject(success, "success", body);
-  return success;
-}
-
-aJsonObject *generateScenesIdLightPutResponse(aJsonObject *body, String sceneId, String lightId) {
-  aJsonObject *root = aJson.createArray();
-  for (int i = 0; i < aJson.getArraySize(body); i++) {
-    aJsonObject *success = aJson.createObject();
-    aJson.addItemToArray(root, wrapWithSuccess(success));
-    aJsonObject *entry = aJson.getArrayItem(body, i);
-    // remove /api/api
-    String target = "/scenes/" + sceneId + "/lightstates/" + lightId + "/";
-    target += entry->name;
-    switch (entry->type) {
-      case aJson_Boolean:
-        aJson.addBooleanToObject(success, target.c_str(), entry->valuebool);
-        break;
-      case aJson_Int:
-        aJson.addNumberToObject(success, target.c_str(), entry->valueint);
-        break;
-      case aJson_String:
-        aJson.addStringToObject(success, target.c_str(), entry->valuestring);
-        break;
-      case aJson_Float:
-        aJson.addNumberToObject(success, target.c_str(), entry->valuefloat);
-        break;
-      case aJson_Array: {
-        aJsonObject *xy = aJson.createArray();
-        aJson.addItemToObject(success, target.c_str(), xy);
-        for (int j = 0; j < aJson.getArraySize(entry); j++) {
-          aJson.addItemToArray(xy, aJson.createItem(aJson.getArrayItem(entry, j)->valuefloat));
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  }
-  return root;
-}
-
 void scenesIdLightFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   switch (method) {
     case HTTP_PUT: {
@@ -551,7 +516,7 @@ void scenesIdLightFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod 
       Serial.println(HTTP->arg("plain"));
       // XXX Do something with this information...
       aJsonObject* body = aJson.parse(( char*) HTTP->arg("plain").c_str());
-      sendJson(generateScenesIdLightPutResponse(body, handler->getWildCard(1), handler->getWildCard(2)));
+      sendJson(generateTargetPutResponse(body, "/scenes/" + handler->getWildCard(1) + "/lightstates/" + handler->getWildCard(2) + "/"));
       aJson.deleteItem(body);
       break;
     }
@@ -718,6 +683,7 @@ void lightsIdStateFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod
         return;
       }
       handler->handleQuery(numberOfTheLight, newInfo, parsedRoot);
+      sendJson(generateTargetPutResponse(parsedRoot, "/lights/" + whandler->getWildCard(1) + "/state/"));
       aJson.deleteItem(parsedRoot);
       break;
     }
