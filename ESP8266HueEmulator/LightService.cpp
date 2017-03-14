@@ -27,14 +27,15 @@ struct rgbcolor {
 #define MAX(a,b) ((a>b)?a:b)
 struct hsvcolor {
   hsvcolor(const rgbcolor& color) {
-    float r = color.r/COLOR_SATURATION;
-    float g = color.g/COLOR_SATURATION;
-    float b = color.b/COLOR_SATURATION;
-    float min = MIN(MIN(r,g),b);
-    v = MAX(MAX(r,g),b);
-    float diff = v - min;
+    float r = ((float)color.r)/COLOR_SATURATION;
+    float g = ((float)color.g)/COLOR_SATURATION;
+    float b = ((float)color.b)/COLOR_SATURATION;
+    float mi = MIN(MIN(r,g),b);
+    float ma = MAX(MAX(r,g),b);
+    float diff = ma - mi;
+    v = ma;
     h = 0;
-    s = (!v)?0:(diff/v);
+    s = (!v)?0:(diff/ma);
     if (diff) {
       if (r == v) {
             h = (g - b) / diff + (g < b ? 6.0f : 0.0f);
@@ -46,9 +47,9 @@ struct hsvcolor {
         h /= 6.0f;
     }
   };
-  uint8_t h;
-  uint8_t s;
-  uint8_t v;
+  float h;
+  float s;
+  float v;
 };
 
 String removeSlashes(String uri) {
