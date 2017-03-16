@@ -34,6 +34,8 @@ mkdir -p $HOME/Arduino/libraries/
 cd $HOME/Arduino/libraries/
 git clone --branch 2.1.4 https://github.com/Makuna/NeoPixelBus.git
 git clone https://github.com/interactive-matter/aJson.git
+git clone https://github.com/PaulStoffregen/Time.git
+git clone https://github.com/gmag11/NtpClient.git
 sed -i -e 's|#define PRINT_BUFFER_LEN 256|#define PRINT_BUFFER_LEN 4096|g'  aJson/aJSON.h
 cd -
 git clone https://github.com/probonopd/ESP8266HueEmulator.git

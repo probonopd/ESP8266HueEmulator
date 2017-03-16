@@ -1,6 +1,8 @@
 #include "LightService.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <TimeLib.h>
+#include <NtpClientLib.h>
 #include <WiFiUdp.h>
 #include "SSDP.h"
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
@@ -413,11 +415,12 @@ void configFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method)
       break;
     }
     case HTTP_PUT: {
-      Serial.print("Body: ");
+      Serial.print("configFn:");
       Serial.println(HTTP->arg("plain"));
       aJsonObject* body = aJson.parse(( char*) HTTP->arg("plain").c_str());
       sendJson(generateTargetPutResponse(body, "/config/"));
       aJson.deleteItem(body);
+      // TODO: actually store this
       break;
     }
     default:
@@ -669,7 +672,7 @@ void lightsIdStateFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod
   switch (method) {
     case HTTP_POST:
     case HTTP_PUT: {
-      Serial.print("JSON Body:");
+      Serial.print("lightsIdState:");
       Serial.println(HTTP->arg("plain"));
       aJsonObject* parsedRoot = aJson.parse(( char*) HTTP->arg("plain").c_str());
       if (!parsedRoot) {
@@ -978,8 +981,27 @@ void addLightsJson(aJsonObject *lights) {
   }
 }
 
+static String format2Digits(int num) {
+  String s = "";
+
+  if (num < 10) {
+    s += "0";
+  }
+  s += String(num);
+  return s;
+}
+
 void addConfigJson(aJsonObject *root)
 {
+  time_t moment = now();
+  String dts = String(year(moment));
+  dts += "-";
+  dts += format2Digits(month(moment));
+  dts += "-";
+  dts += format2Digits(day(moment));
+  dts += "T";
+  dts += NTP.getTimeStr(moment);
+
   aJson.addStringToObject(root, "name", "hue emulator");
   aJson.addStringToObject(root, "swversion", "81012917");
   aJson.addStringToObject(root, "bridgeid", bridgeIDString.c_str());
@@ -991,6 +1013,10 @@ void addConfigJson(aJsonObject *root)
   aJson.addStringToObject(root, "netmask", netmaskString.c_str());
   aJson.addStringToObject(root, "gateway", gatewayString.c_str());
   aJson.addStringToObject(root, "apiversion", "1.3.0");
+  // TODO: send this as "utc" and "localtime" as timezone corrected utc
+  aJson.addStringToObject(root, "localtime", dts.c_str());
+  // TODO: take this from the settings, once we have spiffs support
+  aJson.addStringToObject(root, "timezone", "Europe/London");
   aJsonObject *whitelist;
   aJson.addItemToObject(root, "whitelist", whitelist = aJson.createObject());
   aJsonObject *whitelistFirstEntry;
@@ -1022,7 +1048,7 @@ aJsonObject *validateGroupCreateBody(String body) {
 }
 
 void applyConfigToLightMask(unsigned int lights) {
-  Serial.print("JSON Body:");
+  Serial.print("applyConfigToLightMask:");
   Serial.println(HTTP->arg("plain"));
   aJsonObject* parsedRoot = aJson.parse(( char*) HTTP->arg("plain").c_str());
   if (parsedRoot) {
@@ -1048,7 +1074,7 @@ void applyConfigToLightMask(unsigned int lights) {
 bool updateGroupSlot(int slot, String body) {
   aJsonObject *root;
   if (body != "") {
-    Serial.print("JSON Body:");
+    Serial.print("updateGroupSlot:");
     Serial.println(body);
     root = validateGroupCreateBody(body);
   }
@@ -1127,7 +1153,7 @@ int findSceneIndex(String id) {
 bool updateSceneSlot(int slot, String id, String body) {
   aJsonObject *root;
   if (body != "") {
-    Serial.print("JSON Body:");
+    Serial.print("updateSceneSlot:");
     Serial.println(body);
     root = validateGroupCreateBody(body);
   }

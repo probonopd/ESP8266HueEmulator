@@ -7,6 +7,8 @@
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include <TimeLib.h>
+#include <NtpClientLib.h>
 #include <NeoPixelBus.h>
 #include <NeoPixelAnimator.h> // instead of NeoPixelAnimator branch
 #include "LightService.h"
@@ -57,8 +59,7 @@ class PixelHandler : public LightHandler {
         animator.StopAnimation(colorloopIndex);
         colorloopIndex = -1;
       }
-      if (newInfo.on)
-      {
+      if (newInfo.on) {
         if (_info.effect == EFFECT_COLORLOOP) {
           //color loop at max brightness/saturation on a 60 second cycle
           const int SIXTY_SECONDS = 60000;
@@ -88,15 +89,14 @@ class PixelHandler : public LightHandler {
         {
           // progress will start at 0.0 and end at 1.0
           HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, newColor, param.progress);
-          
+
           for(int i=lightNumber * NUM_PIXELS_PER_LIGHT; i < (lightNumber * NUM_PIXELS_PER_LIGHT) + NUM_PIXELS_PER_LIGHT; i++) {
             strip.SetPixelColor(i, updatedColor);
           }
         };
         animator.StartAnimation(lightNumber, _info.transitionTime, animUpdate);
       }
-      else
-      {
+      else {
         AnimUpdateCallback animUpdate = [ = ](const AnimationParam & param)
         {
           // progress will start at 0.0 and end at 1.0
@@ -132,7 +132,7 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  
+
   // Port defaults to 8266
   // ArduinoOTA.setPort(8266);
 
@@ -160,7 +160,10 @@ void setup() {
     else if (error == OTA_END_ERROR) Serial.println("End Failed");
   });
   ArduinoOTA.begin();
-  
+
+  // Sync our clock
+  NTP.begin("pool.ntp.org", 1, true);
+
   // Show that we are connected
   infoLight(green);
   pinMode(LED_BUILTIN, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
@@ -172,6 +175,9 @@ void setup() {
   for (int i = 0; i < MAX_LIGHT_HANDLERS && i < pixelCount; i++) {
     LightService.setLightHandler(i, new PixelHandler());
   }
+
+  // We'll get the time eventually ...
+  Serial.println(NTP.getTimeDateString(NTP.getLastNTPSync()));
 }
 
 void loop() {
