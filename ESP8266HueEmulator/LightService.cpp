@@ -997,15 +997,6 @@ static String format2Digits(int num) {
 
 void addConfigJson(aJsonObject *root)
 {
-  time_t moment = now();
-  String dts = String(year(moment));
-  dts += "-";
-  dts += format2Digits(month(moment));
-  dts += "-";
-  dts += format2Digits(day(moment));
-  dts += "T";
-  dts += NTP.getTimeStr(moment);
-
   aJson.addStringToObject(root, "name", "hue emulator");
   aJson.addStringToObject(root, "swversion", "81012917");
   aJson.addStringToObject(root, "bridgeid", bridgeIDString.c_str());
@@ -1017,8 +1008,19 @@ void addConfigJson(aJsonObject *root)
   aJson.addStringToObject(root, "netmask", netmaskString.c_str());
   aJson.addStringToObject(root, "gateway", gatewayString.c_str());
   aJson.addStringToObject(root, "apiversion", "1.3.0");
-  // TODO: send this as "utc" and "localtime" as timezone corrected utc
-  aJson.addStringToObject(root, "localtime", dts.c_str());
+  if (timeStatus() == timeSet) {
+    time_t moment = now();
+    String dts = String(year(moment));
+    dts += "-";
+    dts += format2Digits(month(moment));
+    dts += "-";
+    dts += format2Digits(day(moment));
+    dts += "T";
+    dts += NTP.getTimeStr(moment);
+
+    // TODO: send this as "utc" and "localtime" as timezone corrected utc
+    aJson.addStringToObject(root, "localtime", dts.c_str());
+  }
   // TODO: take this from the settings, once we have spiffs support
   aJson.addStringToObject(root, "timezone", "Europe/London");
   aJsonObject *whitelist;

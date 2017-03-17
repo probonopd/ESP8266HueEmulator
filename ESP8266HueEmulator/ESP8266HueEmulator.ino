@@ -162,7 +162,7 @@ void setup() {
   ArduinoOTA.begin();
 
   // Sync our clock
-  NTP.begin("pool.ntp.org", 1, true);
+  NTP.begin("pool.ntp.org", 0, true);
 
   // Show that we are connected
   infoLight(green);
@@ -177,7 +177,9 @@ void setup() {
   }
 
   // We'll get the time eventually ...
-  Serial.println(NTP.getTimeDateString(NTP.getLastNTPSync()));
+  if (timeStatus() == timeSet) {
+    Serial.println(NTP.getTimeDateString(now()));
+  }
 }
 
 void loop() {
