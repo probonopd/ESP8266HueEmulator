@@ -155,10 +155,8 @@ bool SSDPClass::begin(){
   _pending = false;
 
   uint32_t chipId = ESP.getChipId();
-  sprintf(_uuid, "38323636-4558-4dda-9188-cda0e6%02x%02x%02x",
-    (uint16_t) ((chipId >> 16) & 0xff),
-    (uint16_t) ((chipId >>  8) & 0xff),
-    (uint16_t)   chipId        & 0xff  );
+  sprintf(_uuid, "38323636-4558-4dda-9188-%s",
+    WiFi.macAddress().c_str());
 
 #ifdef DEBUG_SSDP
   DEBUG_SSDP.printf("SSDP UUID: %s\r\n", (char *)_uuid);
@@ -260,101 +258,167 @@ void SSDPClass::schema(WiFiClient client){
   );
 }
 
-void SSDPClass::_update(){
-  if(!_pending && _server->next()) {
-    ssdp_method_t method = NONE;
+// writes the next token into token if token is not NULL
+// returns -1 on message end, otherwise returns
+int SSDPClass::_getNextToken(String *token, bool break_on_space, bool break_on_colon) {
+	if (token) *token = "";
+	bool token_found = false;
+	int cr_found = 0;
+	while (_server->getSize() > 0) {
+		char next = _server->read();
+		switch (next) {
+		case '\r':
+		case '\n':
+			cr_found++;
+			if (cr_found == 3) {
+				// end of message reached
+				return -1;
+			}
+			if (token_found) {
+				// end of token reached
+				return _server->getSize();
+			}
+			continue;
+		case ' ':
+			// only treat spaces as part of text if they're not leading
+			if (!token_found) {
+				cr_found = 0;
+				continue;
+			}
+      if (!break_on_space) {
+        break;
+      }
+      cr_found = 0;
+      // end of token reached
+      return _server->getSize();
+		case ':':
+			// only treat colons as part of text if they're not leading
+      if (!token_found) {
+        cr_found = 0;
+        continue;
+      }
+      if (!break_on_colon) {
+        break;
+      }
+      cr_found = 0;
+      // end of token reached
+      return _server->getSize();
+		default:
+			cr_found = 0;
+			token_found = true;
+			break;
+		}
 
+		if (token) {
+		  (*token) += next;
+		}
+	}
+	return 0;
+}
+
+void SSDPClass::_bailRead() {
+    while (_getNextToken(NULL, true, true) > 0);
+    _pending = false;
+    _delay = 0;
+}
+
+void SSDPClass::_parseIncoming() {
     _respondToAddr = _server->getRemoteAddress();
     _respondToPort = _server->getRemotePort();
 
-    typedef enum {METHOD, URI, PROTO, KEY, VALUE, ABORT} states;
-    states state = METHOD;
-
-    typedef enum {START, MAN, ST, MX} headers;
+    typedef enum {START, MAN, ST, MX, UNKNOWN} headers;
     headers header = START;
 
-    uint8_t cursor = 0;
-    uint8_t cr = 0;
+    String token;
+    // get message type
+    int res = _getNextToken(&token, true, false);
+    if (res <= 0) {
+        _bailRead();
+        return;
+    }
+    if (token == "M-SEARCH") {
+    } else if (token == "NOTIFY") {
+	// incoming notifies are not currently handled
+	_bailRead();
+	return;
+    } else {
+        _bailRead();
+        return;
+    }
 
-    char buffer[SSDP_BUFFER_SIZE] = {0};
+    // get URI
+    res = _getNextToken(&token, true, false);
+    if (res <= 0) {
+        _bailRead();
+        return;
+    }
+    if (token != "*") {
+        _bailRead();
+        return;
+    }
+
+    // eat protocol (HTTP/1.1)
+    res = _getNextToken(NULL, false, false);
+    if (res <= 0) {
+        _bailRead();
+        return;
+    }
 
     while(_server->getSize() > 0){
-      char c = _server->read();
+      res = _getNextToken(&token, header == START, header == START);
+      if (res < 0 && header == START) {
+        break;
+      }
 
-      (c == '\r' || c == '\n') ? cr++ : cr = 0;
-
-      switch(state){
-        case METHOD:
-          if(c == ' '){
-            if(strcmp(buffer, "M-SEARCH") == 0) method = SEARCH;
-            else if(strcmp(buffer, "NOTIFY") == 0) method = NOTIFY;
-
-            if(method == NONE) state = ABORT;
-            else state = URI;
-            cursor = 0;
-
-          } else if(cursor < SSDP_METHOD_SIZE - 1){ buffer[cursor++] = c; buffer[cursor] = '\0'; }
-          break;
-        case URI:
-          if(c == ' '){
-            if(strcmp(buffer, "*")) state = ABORT;
-            else state = PROTO;
-            cursor = 0;
-          } else if(cursor < SSDP_URI_SIZE - 1){ buffer[cursor++] = c; buffer[cursor] = '\0'; }
-          break;
-        case PROTO:
-          if(cr == 2){ state = KEY; cursor = 0; }
-          break;
-        case KEY:
-          if(cr == 4){ _pending = true; _process_time = millis(); }
-          else if(c == ' '){ cursor = 0; state = VALUE; }
-          else if(c != '\r' && c != '\n' && c != ':' && cursor < SSDP_BUFFER_SIZE - 1){ buffer[cursor++] = c; buffer[cursor] = '\0'; }
-          break;
-        case VALUE:
-          if(cr == 2){
-            switch(header){
-              case START:
-                break;
-              case MAN:
+      switch(header){
+      case START:
+        if(token.equalsIgnoreCase("MAN")) header = MAN;
+        else if(token.equalsIgnoreCase("ST")) header = ST;
+        else if(token.equalsIgnoreCase("MX")) header = MX;
+        else {
+          header = UNKNOWN;
 #ifdef DEBUG_SSDP
-                DEBUG_SSDP.printf("MAN: %s\r\n", (char *)buffer);
+          DEBUG_SSDP.printf("Found unknown header '%s'\r\n", token.c_str());
 #endif
-                break;
-              case ST:
-                if(strcmp(buffer, "ssdp:all")){
-                  state = ABORT;
+        }
+        break;
+      case MAN:
 #ifdef DEBUG_SSDP
-                  DEBUG_SSDP.printf("REJECT: %s\r\n", (char *)buffer);
+        DEBUG_SSDP.printf("MAN: %s\r\n", token.c_str());
 #endif
-                }
-                // if the search type matches our type, we should respond instead of ABORT
-                if(strcmp(buffer, _deviceType) == 0){
-                  _pending = true;
-                  _process_time = millis();
-                  state = KEY;
-                }
-                break;
-              case MX:
-                _delay = random(0, atoi(buffer)) * 1000L;
-                break;
-            }
-
-            if(state != ABORT){ state = KEY; header = START; cursor = 0; }
-          } else if(c != '\r' && c != '\n'){
-            if(header == START){
-              if(strncmp(buffer, "MA", 2) == 0) header = MAN;
-              else if(strcmp(buffer, "ST") == 0) header = ST;
-              else if(strcmp(buffer, "MX") == 0) header = MX;
-            }
-
-            if(cursor < SSDP_BUFFER_SIZE - 1){ buffer[cursor++] = c; buffer[cursor] = '\0'; }
-          }
-          break;
-        case ABORT:
-          _pending = false; _delay = 0;
-          break;
+        header = START;
+        break;
+      case ST:
+        if(token != "ssdp:all" && token != _deviceType){
+#ifdef DEBUG_SSDP
+          DEBUG_SSDP.printf("REJECT: %s\r\n", token.c_str());
+#endif
+        }
+        _pending = true;
+        _process_time = millis();
+        header = START;
+        break;
+      case MX:
+        _delay = random(0, atoi(token.c_str())) * 1000L;
+        header = START;
+        break;
+      case UNKNOWN:
+        header = START;
+#ifdef DEBUG_SSDP
+        DEBUG_SSDP.printf("Value for unkown header: %s\r\n", token.c_str());
+#endif
+        break;
       }
     }
+    if (header != START) {
+      // something broke during parsing of the message
+       _bailRead();
+    }
+}
+
+void SSDPClass::_update(){
+  if(!_pending && _server->next()) {
+    _parseIncoming();
   }
 
   if(_pending && (millis() - _process_time) > _delay){

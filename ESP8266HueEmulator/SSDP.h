@@ -99,6 +99,9 @@ class SSDPClass{
     void _update();
     void _startTimer();
     static void _onTimerStatic(SSDPClass* self);
+    int _getNextToken(String *token, bool break_on_space, bool break_on_colon);
+    void _bailRead();
+    void _parseIncoming();
 
     UdpContext* _server;
     SSDPTimer* _timer;

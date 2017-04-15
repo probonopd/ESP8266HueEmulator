@@ -713,7 +713,7 @@ void LightServiceClass::begin() {
 
 void LightServiceClass::begin(ESP8266WebServer *svr) {
   HTTP = svr;
-  macString = String(WiFi.macAddress());
+  macString = WiFi.macAddress();
   bridgeIDString = macString;
   bridgeIDString.replace(":", "");
   bridgeIDString = bridgeIDString.substring(0, 6) + "FFFE" + bridgeIDString.substring(6);
