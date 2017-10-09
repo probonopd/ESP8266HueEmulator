@@ -44,7 +44,7 @@ extern "C" {
 #include "lwip/mem.h"
 #include "include/UdpContext.h"
 
-// #define DEBUG_SSDP  Serial
+//#define DEBUG_SSDP  Serial
 
 #define SSDP_INTERVAL     1200
 #define SSDP_PORT         1900
@@ -68,7 +68,7 @@ static const char* _ssdp_notify_template =
 static const char* _ssdp_packet_template =
   "%s" // _ssdp_response_template / _ssdp_notify_template
   "CACHE-CONTROL: max-age=%u\r\n" // SSDP_INTERVAL
-  "SERVER: Arduino/1.0 UPNP/1.1 %s/%s\r\n" // _modelName, _modelNumber
+  "SERVER: FreeRTOS/6.0.5, UPnP/1.0, %s/%s\r\n" // _modelName, _modelNumber
   "USN: uuid:%s\r\n" // _uuid
   "%s: %s\r\n"  // "NT" or "ST", _deviceType
   "LOCATION: http://%u.%u.%u.%u:%u/%s\r\n" // WiFi.localIP(), _port, _schemaURL
@@ -155,8 +155,10 @@ bool SSDPClass::begin(){
   _pending = false;
 
   uint32_t chipId = ESP.getChipId();
-  sprintf(_uuid, "38323636-4558-4dda-9188-%s",
-    WiFi.macAddress().c_str());
+  String mac =  WiFi.macAddress();
+  mac.replace(":", "");
+  mac.toLowerCase();
+  sprintf(_uuid, "38323636-4558-4dda-9188-%s", mac.c_str());
 
 #ifdef DEBUG_SSDP
   DEBUG_SSDP.printf("SSDP UUID: %s\r\n", (char *)_uuid);
@@ -336,11 +338,12 @@ void SSDPClass::_parseIncoming() {
         _bailRead();
         return;
     }
+    
     if (token == "M-SEARCH") {
     } else if (token == "NOTIFY") {
-	// incoming notifies are not currently handled
-	_bailRead();
-	return;
+    	 // incoming notifies are not currently handled
+    	_bailRead();
+    	return;
     } else {
         _bailRead();
         return;

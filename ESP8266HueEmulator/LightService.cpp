@@ -8,7 +8,7 @@
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
 #include <assert.h>
 
-#if PRINT_BUFFER_LEN < 2048
+#if PRINT_BUFFER_LEN < 4096
 #  error aJson print buffer length PRINT_BUFFER_LEN must be increased to at least 4096
 #endif
 
@@ -190,13 +190,16 @@ protected:
 
 LightServiceClass LightService;
 
-LightHandler *lightHandlers[MAX_LIGHT_HANDLERS]; // interfaces exposed to the outside world
+LightHandler *lightHandlers[MAX_LIGHT_HANDLERS] = {}; // interfaces exposed to the outside world
+
+LightServiceClass::LightServiceClass() { }
 
 bool LightServiceClass::setLightHandler(int index, LightHandler *handler) {
   if (index >= currentNumLights || index < 0) return false;
   lightHandlers[index] = handler;
   return true;
 }
+
 
 bool LightServiceClass::setLightsAvailable(int lights) {
   if (lights <= MAX_LIGHT_HANDLERS) {
@@ -238,10 +241,10 @@ static const char* _ssdp_response_template =
   "EXT:\r\n"
   "CACHE-CONTROL: max-age=%u\r\n" // SSDP_INTERVAL
   "LOCATION: http://%s:%u/%s\r\n" // WiFi.localIP(), _port, _schemaURL
-  "SERVER: Arduino/1.0 UPNP/1.1 %s/%s\r\n" // _modelName, _modelNumber
+  "SERVER: FreeRTOS/6.0.5, UPnP/1.0, %s/%s\r\n" // _modelName, _modelNumber
   "hue-bridgeid: %s\r\n"
   "ST: %s\r\n"  // _deviceType
-  "USN: uuid:%s\r\n" // _uuid
+  "USN: uuid:%s::upnp:rootdevice\r\n" // _uuid::_deviceType
   "\r\n";
 
 static const char* _ssdp_notify_template =
@@ -250,11 +253,31 @@ static const char* _ssdp_notify_template =
   "NTS: ssdp:alive\r\n"
   "CACHE-CONTROL: max-age=%u\r\n" // SSDP_INTERVAL
   "LOCATION: http://%s:%u/%s\r\n" // WiFi.localIP(), _port, _schemaURL
-  "SERVER: Arduino/1.0 UPNP/1.1 %s/%s\r\n" // _modelName, _modelNumber
+  "SERVER: FreeRTOS/6.0.5, UPnP/1.0, %s/%s\r\n" // _modelName, _modelNumber
   "hue-bridgeid: %s\r\n"
   "NT: %s\r\n"  // _deviceType
-  "USN: uuid:%s\r\n" // _uuid
+  "USN: uuid:%s::upnp:rootdevice\r\n" // _uuid
   "\r\n";
+  
+static const char* _ssdp_xml_template = "<?xml version=\"1.0\" ?>"
+  "<root xmlns=\"urn:schemas-upnp-org:device-1-0\">"
+  "<specVersion><major>1</major><minor>0</minor></specVersion>"
+  "<URLBase>http://{ip}:80/</URLBase>"
+  "<device>"
+    "<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>"
+    "<friendlyName>Philips hue ( {ip} )</friendlyName>"
+    "<manufacturer>Royal Philips Electronics</manufacturer>"
+    "<manufacturerURL>http://www.philips.com</manufacturerURL>"
+    "<modelDescription>Philips hue Personal Wireless Lighting</modelDescription>"
+    "<modelName>Philips hue bridge 2012</modelName>"
+    "<modelNumber>929000226503</modelNumber>"
+    "<modelURL>http://www.meethue.com</modelURL>"
+    "<serialNumber>{mac}</serialNumber>"
+    "<UDN>uuid:2f402f80-da50-11e1-9b23-{mac}</UDN>"
+    "<presentationURL>index.html</presentationURL>"
+    //"<iconList><icon><mimetype>image/png</mimetype><height>48</height><width>48</width><depth>24</depth><url>hue_logo_0.png</url></icon><icon><mimetype>image/png</mimetype><height>120</height><width>120</width><depth>24</depth><url>hue_logo_3.png</url></icon></iconList>"
+  "</device>"
+  "</root>";
 
 int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
                           bool isNotify, int interval, char *modelName,
@@ -352,9 +375,17 @@ void on(HandlerFunction fn, const String &wcUri, HTTPMethod method, char wildcar
 }
 
 void descriptionFn() {
-  String str = "<root><specVersion><major>1</major><minor>0</minor></specVersion><URLBase>http://" + ipString + ":80/</URLBase><device><deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType><friendlyName>Philips hue (" + ipString + ")</friendlyName><manufacturer>Royal Philips Electronics</manufacturer><manufacturerURL>http://www.philips.com</manufacturerURL><modelDescription>Philips hue Personal Wireless Lighting</modelDescription><modelName>Philips hue bridge 2012</modelName><modelNumber>929000226503</modelNumber><modelURL>http://www.meethue.com</modelURL><serialNumber>"+macString+"</serialNumber><UDN>uuid:2f402f80-da50-11e1-9b23-"+macString+"</UDN><presentationURL>index.html</presentationURL><iconList><icon><mimetype>image/png</mimetype><height>48</height><width>48</width><depth>24</depth><url>hue_logo_0.png</url></icon><icon><mimetype>image/png</mimetype><height>120</height><width>120</width><depth>24</depth><url>hue_logo_3.png</url></icon></iconList></device></root>";
-  HTTP->send(200, "text/plain", str);
-  Serial.println(str);
+  String response = _ssdp_xml_template;
+
+  String escapedMac = macString;
+  escapedMac.replace(":", "");
+  escapedMac.toLowerCase();
+  
+  response.replace("{mac}", escapedMac);
+  response.replace("{ip}", ipString);
+
+  HTTP->send(200, "text/xml", response);
+  Serial.println(response);
 }
 
 void unimpFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
@@ -571,7 +602,7 @@ void groupsIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod metho
         aJson.addStringToObject(object, "name", "0");
         aJsonObject *lightsArray = aJson.createArray();
         aJson.addItemToObject(object, "lights", lightsArray);
-        for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
+        for (int i = 0; i < LightService.getLightsAvailable(); i++) {
           if (!lightHandlers[i]) {
             continue;
           }
@@ -666,10 +697,12 @@ void lightsIdFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod meth
 }
 
 void lightsIdStateFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod method) {
-  int numberOfTheLight = atoi(whandler->getWildCard(1).c_str()) - 1;
+  int numberOfTheLight = max(0, atoi(whandler->getWildCard(1).c_str()) - 1);
   LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
   if (!handler) {
-    sendError(3, requestUri, "Requested light not available");
+    char buff[100] = {};
+    sprintf(buff, "Requested light not available for number %d", numberOfTheLight);
+    sendError(3, requestUri, buff);
     return;
   }
 
@@ -749,20 +782,25 @@ void LightServiceClass::begin(ESP8266WebServer *svr) {
 
   HTTP->begin();
 
+  String serial = macString;
+  serial.toLowerCase();
+  
   Serial.println("Starting SSDP...");
-  SSDP.begin();
-  SSDP.setSchemaURL((char*)"description.xml");
+  SSDP.setSchemaURL("description.xml");
   SSDP.setHTTPPort(80);
-  SSDP.setName((char*)"Philips hue clone");
-  SSDP.setSerialNumber(macString.c_str());
-  SSDP.setURL((char*)"index.html");
-  SSDP.setModelName((char*)"IpBridge");
-  SSDP.setModelNumber((char*)"0.1");
-  SSDP.setModelURL((char*)"http://www.meethue.com");
-  SSDP.setManufacturer((char*)"Royal Philips Electronics");
-  SSDP.setManufacturerURL((char*)"http://www.philips.com");
-  SSDP.setDeviceType((char*)"upnp:rootdevice");
-  SSDP.setMessageFormatCallback(ssdpMsgFormatCallback);
+  SSDP.setName("Philips hue clone");
+  SSDP.setSerialNumber(serial.c_str());
+  SSDP.setURL("index.html");
+  SSDP.setModelName("IpBridge");
+  SSDP.setModelNumber("0.1");
+  SSDP.setModelURL("http://www.meethue.com");
+  SSDP.setManufacturer("Royal Philips Electronics");
+  SSDP.setManufacturerURL("http://www.philips.com");
+
+  //SSDP.setDeviceType((char*)"upnp:rootdevice");
+  SSDP.setDeviceType("urn:schemas-upnp-org:device:basic:1");
+  //SSDP.setMessageFormatCallback(ssdpMsgFormatCallback);
+  SSDP.begin();
   Serial.println("SSDP Started");
 }
 
@@ -770,15 +808,14 @@ void LightServiceClass::update() {
   HTTP->handleClient();
 }
 
-void sendJson(aJsonObject *root)
-{
+void sendJson(aJsonObject *root) {
   // Take aJsonObject and print it to Serial and to WiFi
   // From https://github.com/pubnub/msp430f5529/blob/master/msp430f5529.ino
   char *msgStr = aJson.print(root);
   aJson.deleteItem(root);
   Serial.println(millis());
   Serial.println(msgStr);
-  HTTP->send(200, "text/plain", msgStr);
+  HTTP->send(200, "application/json", msgStr);
   free(msgStr);
 }
 
@@ -1001,27 +1038,46 @@ bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLig
 }
 
 void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler) {
-  if (!lightHandler) return;
-  String lightName = "" + (String) (numberOfTheLight + 1);
+  if (!lightHandler) 
+    return;
+
+  
+  String lightNumber = (String) (numberOfTheLight + 1);
+  String lightName = lightHandler->getFriendlyName(numberOfTheLight);
   aJsonObject *light;
-  aJson.addItemToObject(root, lightName.c_str(), light = aJson.createObject());
-  aJson.addStringToObject(light, "type", "Extended color light"); // type of lamp (all "Extended colour light" for now)
-  aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) (numberOfTheLight + 1)).c_str()); // // the name as set through the web UI or app
-  aJson.addStringToObject(light, "uniqueid",  ("AA:BB:CC:DD:EE:FF:00:11-" + (String) (numberOfTheLight + 1)).c_str());
+  aJson.addItemToObject(root, lightNumber.c_str(), light = aJson.createObject());
+
+  HueLightInfo info = lightHandler->getInfo(numberOfTheLight);
+  if (info.bulbType == HueBulbType::DIMMABLE_LIGHT) {
+    aJson.addStringToObject(light, "type", "Dimmable light");
+  } else {
+    aJson.addStringToObject(light, "type", "Extended color light");
+  }
+  
+  aJson.addStringToObject(light, "manufacturername", "OpenSource"); // type of lamp (all "Extended colour light" for now)
+  aJson.addStringToObject(light, "swversion", "0.1");
+  aJson.addStringToObject(light, "name",  lightName.c_str()); // // the name as set through the web UI or app
+  aJson.addStringToObject(light, "uniqueid",  (macString + "-" + (String) (numberOfTheLight + 1)).c_str());
   aJson.addStringToObject(light, "modelid", "LST001"); // the model number
+  
   aJsonObject *state;
   aJson.addItemToObject(light, "state", state = aJson.createObject());
-  HueLightInfo info = lightHandler->getInfo(numberOfTheLight);
   aJson.addBooleanToObject(state, "on", info.on);
-  aJson.addNumberToObject(state, "hue", info.hue); // hs mode: the hue (expressed in ~deg*182.04)
+
   aJson.addNumberToObject(state, "bri", info.brightness); // brightness between 0-254 (NB 0 is not off!)
-  aJson.addNumberToObject(state, "sat", info.saturation); // hs mode: saturation between 0-254
-  double numbers[2] = {0.0, 0.0};
-  aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
-  aJson.addNumberToObject(state, "ct", 500); // ct mode: color temp (expressed in mireds range 154-500)
+
+  if (info.bulbType == HueBulbType::EXTENDED_COLOR_LIGHT) {
+    double numbers[2] = {0.0, 0.0};
+    aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
+    aJson.addStringToObject(state, "colormode", "hs"); // the current color mode
+    aJson.addStringToObject(state, "effect", info.effect == EFFECT_COLORLOOP ? "colorloop" : "none");
+    aJson.addNumberToObject(state, "ct", 500); // ct mode: color temp (expressed in mireds range 154-500)
+
+    aJson.addNumberToObject(state, "hue", info.hue); // hs mode: the hue (expressed in ~deg*182.04)
+    aJson.addNumberToObject(state, "sat", info.saturation); // hs mode: saturation between 0-254
+  }
+  
   aJson.addStringToObject(state, "alert", "none"); // 'select' flash the lamp once, 'lselect' repeat flash for 30s
-  aJson.addStringToObject(state, "effect", info.effect == EFFECT_COLORLOOP ? "colorloop" : "none");
-  aJson.addStringToObject(state, "colormode", "hs"); // the current color mode
   aJson.addBooleanToObject(state, "reachable", true); // lamp can be seen by the hub
 }
 
