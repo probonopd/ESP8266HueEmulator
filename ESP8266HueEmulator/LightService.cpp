@@ -674,7 +674,7 @@ void lightsFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method)
   }
 }
 
-void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler);
+void addSingleLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler);
 void lightsIdFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod method) {
   int numberOfTheLight = atoi(whandler->getWildCard(1).c_str()) - 1;
   LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
@@ -682,7 +682,7 @@ void lightsIdFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod meth
     case HTTP_GET: {
       aJsonObject *root;
       root = aJson.createObject();
-      addLightJson(root, numberOfTheLight, handler);
+      addSingleLightJson(root, numberOfTheLight, handler);
       sendJson(root);
       break;
     }
@@ -708,14 +708,12 @@ void lightsIdStateFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod
 
   switch (method) {
     case HTTP_POST:
-    case HTTP_PUT: {
-      Serial.print("lightsIdState:");
-      Serial.println(HTTP->arg("plain"));
-      aJsonObject* parsedRoot = aJson.parse(( char*) HTTP->arg("plain").c_str());
+    case HTTP_PUT: { 
+      aJsonObject* parsedRoot = aJson.parse( (char*) HTTP->arg("plain").c_str());   
       if (!parsedRoot) {
         // unparseable json
-        sendError(2, requestUri, "Bad JSON body in request");
-        return;
+          sendError(2, requestUri, "Bad JSON body in request");
+          return;       
       }
       HueLightInfo currentInfo = handler->getInfo(numberOfTheLight);
       HueLightInfo newInfo;
@@ -1037,6 +1035,34 @@ bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLig
   }
   return true;
 }
+void addSingleLightJson(aJsonObject* light, int numberOfTheLight, LightHandler *lightHandler) {
+  if (!lightHandler) return;
+  String lightName = "" + (String) (numberOfTheLight + 1);
+  
+  aJson.addStringToObject(light, "manufacturername", "OpenSource"); // type of lamp (all "Extended colour light" for now)
+  aJson.addStringToObject(light, "modelid", "LST001"); // the model number
+  aJson.addStringToObject(light, "name",  ("Hue LightStrips " + (String) (numberOfTheLight + 1)).c_str()); // // the name as set through the web UI or app
+  aJsonObject *state;
+  aJson.addItemToObject(light, "state", state = aJson.createObject());
+  HueLightInfo info = lightHandler->getInfo(numberOfTheLight);
+  aJson.addBooleanToObject(state, "on", info.on);
+  aJson.addNumberToObject(state, "hue", info.hue); // hs mode: the hue (expressed in ~deg*182.04)
+  aJson.addNumberToObject(state, "bri", info.brightness); // brightness between 0-254 (NB 0 is not off!)
+  aJson.addNumberToObject(state, "sat", info.saturation); // hs mode: saturation between 0-254
+  double numbers[2] = {0.0, 0.0};
+  aJson.addItemToObject(state, "xy", aJson.createFloatArray(numbers, 2)); // xy mode: CIE 1931 color co-ordinates
+  aJson.addNumberToObject(state, "ct", 500); // ct mode: color temp (expressed in mireds range 154-500)
+  aJson.addStringToObject(state, "alert", "none"); // 'select' flash the lamp once, 'lselect' repeat flash for 30s
+  aJson.addStringToObject(state, "effect", info.effect == EFFECT_COLORLOOP ? "colorloop" : "none");
+  aJson.addStringToObject(state, "colormode", "hs"); // the current color mode
+  aJson.addBooleanToObject(state, "reachable", true); // lamp can be seen by the hub  aJson.addStringToObject(root, "type", "Extended color light"); // type of lamp (all "Extended colour light" for now)
+  
+  aJson.addStringToObject(light, "swversion", "0.1"); // type of lamp (all "Extended colour light" for now)
+  aJson.addStringToObject(light, "type", "Extended color light"); // type of lamp (all "Extended colour light" for now)
+  aJson.addStringToObject(light, "uniqueid",  ((String) (numberOfTheLight + 1)).c_str());
+
+}
+
 
 void addLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler) {
   if (!lightHandler) 
