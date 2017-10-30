@@ -188,8 +188,6 @@ protected:
     char _wildcard;
 };
 
-LightServiceClass LightService;
-
 LightHandler *lightHandlers[MAX_LIGHT_HANDLERS] = {}; // interfaces exposed to the outside world
 
 LightServiceClass::LightServiceClass() { }
@@ -265,7 +263,7 @@ static const char* _ssdp_xml_template = "<?xml version=\"1.0\" ?>"
   "<URLBase>http://{ip}:80/</URLBase>"
   "<device>"
     "<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>"
-    "<friendlyName>Philips hue ( {ip} )</friendlyName>"
+    "<friendlyName>Philips hue ({ip})</friendlyName>"
     "<manufacturer>Royal Philips Electronics</manufacturer>"
     "<manufacturerURL>http://www.philips.com</manufacturerURL>"
     "<modelDescription>Philips hue Personal Wireless Lighting</modelDescription>"
@@ -275,7 +273,22 @@ static const char* _ssdp_xml_template = "<?xml version=\"1.0\" ?>"
     "<serialNumber>{mac}</serialNumber>"
     "<UDN>uuid:2f402f80-da50-11e1-9b23-{mac}</UDN>"
     "<presentationURL>index.html</presentationURL>"
-    //"<iconList><icon><mimetype>image/png</mimetype><height>48</height><width>48</width><depth>24</depth><url>hue_logo_0.png</url></icon><icon><mimetype>image/png</mimetype><height>120</height><width>120</width><depth>24</depth><url>hue_logo_3.png</url></icon></iconList>"
+    "<iconList>"
+    "  <icon>"
+    "    <mimetype>image/png</mimetype>"
+    "    <height>48</height>"
+    "    <width>48</width>"
+    "    <depth>24</depth>"
+    "    <url>hue_logo_0.png</url>"
+    "  </icon>"
+    "  <icon>"
+    "    <mimetype>image/png</mimetype>"
+    "    <height>120</height>"
+    "    <width>120</width>"
+    "    <depth>24</depth>"
+    "    <url>hue_logo_3.png</url>"
+    "  </icon>"
+    "</iconList>"
   "</device>"
   "</root>";
 
@@ -372,6 +385,29 @@ class LightGroup {
 
 void on(HandlerFunction fn, const String &wcUri, HTTPMethod method, char wildcard = '*') {
   HTTP->addHandler(new WcFnRequestHandler(fn, wcUri, method, wildcard));
+}
+
+void indexPageFn() {
+	String response = "<html><body>"
+	"<h2>Philips HUE ( {ip} )</h2>"
+	"<p>Available lights:</p>"
+	"<ul>{lights}</ul>"
+	"</body></html>";
+	
+	String lights = "";
+	
+	 for (int i = 0; i < LightService.getLightsAvailable(); i++) {
+	  if (!lightHandlers[i]) {
+		  continue;
+	  }
+	  	  
+	  lights += "<li>" + lightHandlers[i]->getFriendlyName(i) + "</li>";
+	}
+	
+	response.replace("{ip}", ipString);
+	response.replace("{lights}", lights);
+		
+	HTTP->send(200, "text/html", response);
 }
 
 void descriptionFn() {
@@ -757,6 +793,7 @@ void LightServiceClass::begin(ESP8266WebServer *svr) {
   Serial.print(":");
   Serial.println(80);
 
+  HTTP->on("/index.html", HTTP_GET, indexPageFn);
   HTTP->on("/description.xml", HTTP_GET, descriptionFn);
   on(configFn, "/api/*/config", HTTP_ANY);
   on(configFn, "/api/config", HTTP_GET);

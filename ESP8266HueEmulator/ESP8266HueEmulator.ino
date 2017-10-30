@@ -34,6 +34,7 @@ RgbColor black = RgbColor(0);
 #define pixelPin 2 // Strip is attached to GPIO2 on ESP-01
 NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(MAX_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, pixelPin);
 NeoPixelAnimator animator(MAX_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, NEO_MILLISECONDS); // NeoPixel animation management object
+LightServiceClass LightService;
 
 HsbColor getHsb(int hue, int sat, int bri) {
   float H, S, B;
