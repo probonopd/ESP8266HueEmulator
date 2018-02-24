@@ -2,7 +2,7 @@ language: c
 sudo: false
 notifications: false
 before_install:
-  - source <(curl -SLs https://raw.githubusercontent.com/adafruit/travis-ci-arduino/master/install.sh)
+  - source <(curl -SLs https://raw.githubusercontent.com/adafruit/travis-ci-arduino/eeaeaf8fa253465d18785c2bb589e14ea9893f9f/install.sh)
 install:
   - mkdir -p $HOME/arduino_ide/libraries/
   - cd $HOME/arduino_ide/libraries/
