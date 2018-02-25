@@ -6,10 +6,10 @@ before_install:
 install:
   - mkdir -p $HOME/arduino_ide/libraries/
   - cd $HOME/arduino_ide/libraries/
-  - git clone -p 66d76c6 https://github.com/Makuna/NeoPixelBus
-  - git clone -p ec56354 https://github.com/interactive-matter/aJson
-  - git clone -p 420a3c0 https://github.com/PaulStoffregen/Time
-  - git clone -p f620b62 https://github.com/gmag11/NtpClient
+  - git clone -o 66d76c6 https://github.com/Makuna/NeoPixelBus
+  - git clone -o ec56354 https://github.com/interactive-matter/aJson
+  - git clone -o 420a3c0 https://github.com/PaulStoffregen/Time
+  - git clone -o f620b62 https://github.com/gmag11/NtpClient
   - sed -i -e 's|#define PRINT_BUFFER_LEN 256|#define PRINT_BUFFER_LEN 4096|g'  aJson/aJSON.h
   - cd -
 script:
