@@ -14,7 +14,6 @@
 #include "LightService.h"
 
 // these are only used in LightHandler.cpp, but it seems that the IDE only scans the .ino and real libraries for dependencies
-#include <ESP8266WebServer.h>
 #include "SSDP.h"
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
 
@@ -32,7 +31,7 @@ RgbColor black = RgbColor(0);
 
 #define pixelCount 30
 #define pixelPin 2 // Strip is attached to GPIO2 on ESP-01
-NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(MAX_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, pixelPin);
+NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart1Ws2812xMethod> strip(MAX_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, pixelPin);
 NeoPixelAnimator animator(MAX_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, NEO_MILLISECONDS); // NeoPixel animation management object
 LightServiceClass LightService;
 

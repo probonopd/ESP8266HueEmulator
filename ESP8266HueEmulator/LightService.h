@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ESP8266WebServer.h>
 
 enum HueColorType {
   TYPE_HUE_SAT, TYPE_CT, TYPE_XY
@@ -49,7 +50,6 @@ class LightHandler {
 #define MAX_LIGHT_HANDLERS 2
 #define COLOR_SATURATION 255.0f
 
-class ESP8266WebServer;
 class LightServiceClass {
     const char* _friendlyName;
 

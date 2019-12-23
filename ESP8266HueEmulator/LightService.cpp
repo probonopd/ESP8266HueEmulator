@@ -134,7 +134,7 @@ public:
     {
       assert(_wildcard != '/');
       // verify that the URI is reasonable (only contains wildcard at the beginning/end/whole path segments
-      for(int i = 0; i < _uri.length(); i++) {
+      for(size_t i = 0; i < _uri.length(); i++) {
         if (_uri[i] == _wildcard) {
           if (i != 0 && i != _uri.length() - 1 && (_uri[i-1] != '/' || _uri[i+1] != '/')) {
             assert(false);

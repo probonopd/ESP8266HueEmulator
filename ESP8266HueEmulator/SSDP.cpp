@@ -154,7 +154,6 @@ SSDPClass::~SSDPClass(){
 bool SSDPClass::begin(){
   _pending = false;
 
-  uint32_t chipId = ESP.getChipId();
   String mac =  WiFi.macAddress();
   mac.replace(":", "");
   mac.toLowerCase();
@@ -181,14 +180,14 @@ bool SSDPClass::begin(){
     return false;
   }
 
-  if (!_server->listen(*IP_ADDR_ANY, SSDP_PORT)) {
+  if (!_server->listen(IP_ADDR_ANY, SSDP_PORT)) {
     return false;
   }
 
   _server->setMulticastInterface(ifaddr);
   _server->setMulticastTTL(_ttl);
   _server->onRx(std::bind(&SSDPClass::_update, this));
-  if (!_server->connect(multicast_addr, SSDP_PORT)) {
+  if (!_server->connect(&multicast_addr, SSDP_PORT)) {
     return false;
   }
 
@@ -199,11 +198,11 @@ bool SSDPClass::begin(){
 
 void SSDPClass::_send(ssdp_method_t method){
   char buffer[1460];
-  uint32_t ip = WiFi.localIP();
+  ip_addr_t ip = WiFi.localIP();
 
   int len;
   if (_messageFormatCallback) {
-    len = _messageFormatCallback(this, buffer, sizeof(buffer), method != NONE, SSDP_INTERVAL, _modelName, _modelNumber, _uuid, _deviceType, ip, _port, _schemaURL);
+    len = _messageFormatCallback(this, buffer, sizeof(buffer), method != NONE, SSDP_INTERVAL, _modelName, _modelNumber, _uuid, _deviceType, ip.addr, _port, _schemaURL);
   } else {
     len = snprintf(buffer, sizeof(buffer),
       _ssdp_packet_template,
@@ -244,7 +243,7 @@ void SSDPClass::_send(ssdp_method_t method){
 }
 
 void SSDPClass::schema(WiFiClient client){
-  uint32_t ip = WiFi.localIP();
+  ip_addr_t ip = WiFi.localIP();
   client.printf(_ssdp_schema_template,
     IP2STR(&ip), _port,
     _deviceType,
